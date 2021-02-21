@@ -3,18 +3,18 @@ package sim
 import "time"
 
 type Strategy interface {
-	tick(time.Time, *portfolio)
+	tick(time.Time, portfolio)
 }
 
 type MidMonth struct {
 	lastInvested time.Time
 }
 
-func (mm *MidMonth) tick(date time.Time, p *portfolio) {
+func (mm *MidMonth) tick(date time.Time, p portfolio) {
 	if mm.lastInvested.Month() != date.Month() {
 		if date.Day() > 14 {
 			// Attempt invest
-			err := p.rebalance(p.cash, date)
+			err := p.rebalance(p.getCashBalance(), date)
 			if err != nil {
 				return
 			}

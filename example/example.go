@@ -41,7 +41,7 @@ func SimulateMonthly() {
 	setup()
 
 	startDate := time.Date(2020, 1, 1, 10, 0, 0, 0, time.UTC)
-	p := sim.NewPortfolio([]sim.Stock{{"IBM", "", "", 1}}, 0.0)
+	p := sim.NewSinglePortfolio(sim.Stock{"IBM", "", "", 1}, 0.0)
 	inc := sim.NewIncome(startDate, 1000.0)
 	strat := sim.NewStrategy(startDate)
 
