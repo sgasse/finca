@@ -2,10 +2,12 @@ package stockdata
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -13,6 +15,10 @@ var (
 	apiTimeout  = 13 * time.Second
 	rateLimitOk = make(chan bool, 1)
 	avAPIKey    string
+	cache       = struct {
+		sync.RWMutex
+		m map[string]tsDailyAdjResp
+	}{m: make(map[string]tsDailyAdjResp)}
 )
 
 type tsDailyAdjMd struct {
@@ -39,12 +45,35 @@ type tsDailyAdjResp struct {
 	TimeSeries map[string]tsDailyAdj `json:"Time Series (Daily)"`
 }
 
-func GetTsDailyAdj(symbol string) tsDailyAdjResp {
+func GetPrice(symbol string, date time.Time) (float64, error) {
+	// Check if data for symbol exists
+	cache.RLock()
+	tsData, ok := cache.m[symbol]
+	if !ok {
+		cache.RUnlock()
+		cache.Lock()
+		cache.m[symbol] = getTsDailyAdj(symbol)
+		tsData = cache.m[symbol]
+		cache.Unlock()
+	} else {
+		cache.RUnlock()
+	}
+
+	// Check if date exists
+	dateS := date.Format("2006-01-02")
+	dailyData, ok := tsData.TimeSeries[dateS]
+	if !ok {
+		return 0.0, errors.New(fmt.Sprint("No entry for date ", dateS))
+	}
+
+	return dailyData.AdjustedClose, nil
+}
+
+func getTsDailyAdj(symbol string) tsDailyAdjResp {
 	<-rateLimitOk
 	log.Print("Fetching daily adjusted time series data for symbol ", symbol)
 
-	// TODO: outputsize=full
-	url := fmt.Sprintf("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=%s&outputsize=compact&apikey=%s",
+	url := fmt.Sprintf("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=%s&outputsize=full&apikey=%s",
 		symbol, avAPIKey)
 
 	client := http.Client{Timeout: time.Second * 5}

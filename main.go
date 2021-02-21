@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	example.GetPrices()
+	example.SimulateMonthly()
 }
