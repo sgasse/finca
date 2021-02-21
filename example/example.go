@@ -40,11 +40,24 @@ func PrintPrices() {
 func SimulateMonthly() {
 	setup()
 
-	startDate := time.Date(2020, 1, 1, 10, 0, 0, 0, time.UTC)
-	p := sim.NewSinglePortfolio(sim.Stock{"IBM", "", "", 1}, 0.0)
+	startDate := time.Date(2010, 1, 1, 10, 0, 0, 0, time.UTC)
+	p := sim.NewSinglePortfolio(sim.Stock{"EUNL.DE", "", "", 1}, 0.0)
 	inc := sim.NewIncome(startDate, 1000.0)
-	strat := sim.NewStrategy(startDate)
+	strat := sim.NewMonthlyStrategy(startDate)
+	sim.Simulate(p, inc, startDate, strat)
+
+	p.Evaluate(time.Now())
+}
+
+func SimulateBiYearly() {
+	setup()
+
+	startDate := time.Date(2010, 1, 1, 10, 0, 0, 0, time.UTC)
+	p := sim.NewSinglePortfolio(sim.Stock{"EUNL.DE", "", "", 1}, 0.0)
+	inc := sim.NewIncome(startDate, 1000.0)
+	strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{2, 8})
 
 	sim.Simulate(p, inc, startDate, strat)
 
+	p.Evaluate(time.Now())
 }

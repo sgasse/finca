@@ -6,4 +6,5 @@ import (
 
 func main() {
 	example.SimulateMonthly()
+	example.SimulateBiYearly()
 }

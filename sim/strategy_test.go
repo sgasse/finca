@@ -40,7 +40,7 @@ func (fp *fakePortfolio) transact(amount float64) {
 
 func TestNewStrategy(t *testing.T) {
 	startDate := time.Date(2020, 6, 1, 12, 0, 0, 0, time.UTC)
-	strat := NewStrategy(startDate)
+	strat := NewMonthlyStrategy(startDate)
 
 	if midM, ok := strat.(*MidMonth); ok {
 		lastInvDate := midM.lastInvested.Format("2006-01-02")
@@ -53,7 +53,7 @@ func TestNewStrategy(t *testing.T) {
 
 func TestStrategyTick(t *testing.T) {
 	startDate := time.Date(2020, 6, 1, 12, 0, 0, 0, time.UTC)
-	strat := NewStrategy(startDate)
+	strat := NewMonthlyStrategy(startDate)
 
 	if midM, ok := strat.(*MidMonth); ok {
 		fp1 := &fakePortfolio{cash: 333.0}

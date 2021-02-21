@@ -59,14 +59,15 @@ func GetPrice(symbol string, date time.Time) (float64, error) {
 		cache.RUnlock()
 	}
 
-	// Check if date exists
-	dateS := date.Format("2006-01-02")
-	dailyData, ok := tsData.TimeSeries[dateS]
-	if !ok {
-		return 0.0, errors.New(fmt.Sprint("No entry for date ", dateS))
+	// Check for price on the exact date or up to one week previously
+	for i := 0; i <= 7; i++ {
+		dateS := date.Add(-time.Duration(i) * 24 * time.Hour).Format("2006-01-02")
+		dailyData, ok := tsData.TimeSeries[dateS]
+		if ok {
+			return dailyData.AdjustedClose, nil
+		}
 	}
-
-	return dailyData.AdjustedClose, nil
+	return 0.0, errors.New(fmt.Sprint("Could not find a price for ", symbol))
 }
 
 func getTsDailyAdj(symbol string) tsDailyAdjResp {
