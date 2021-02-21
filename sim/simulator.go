@@ -13,10 +13,10 @@ func Simulate(p portfolio, inc Income, start time.Time, strat Strategy) error {
 	simDay := start
 	// Simulate until reaching the current date
 	for time.Now().Sub(simDay) > 0 {
-		// Tick income
+		// Maybe receive income
 		p.transact(inc.tick(simDay))
 
-		// Tick invest strategy
+		// Maybe invest
 		strat.tick(simDay, p)
 
 		// Increase day

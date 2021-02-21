@@ -40,5 +40,8 @@ func TestMonthlyIncomeTick(t *testing.T) {
 	}
 
 	pay = mi.tick(time.Date(2020, 3, 1, 0, 0, 0, 0, time.UTC))
+	if math.Abs(pay-amount) > 1e-7 {
+		t.Error("Expected payout of ", amount, ", got ", pay)
+	}
 
 }
