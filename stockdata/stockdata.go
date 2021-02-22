@@ -7,18 +7,24 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"path"
 	"sync"
 	"time"
 )
 
 var (
-	apiTimeout  = 13 * time.Second
-	rateLimitOk = make(chan bool, 1)
 	avAPIKey    string
+	SigChan     = make(chan os.Signal, 1)
+	rateLimitOk = make(chan bool, 1)
+	apiTimeout  = 13 * time.Second
 	cache       = struct {
 		sync.RWMutex
 		m map[string]tsDailyAdjResp
 	}{m: make(map[string]tsDailyAdjResp)}
+	cacheFile = ".avCache.json"
+	cachePath string
 )
 
 type tsDailyAdjMd struct {
@@ -43,6 +49,14 @@ type tsDailyAdj struct {
 type tsDailyAdjResp struct {
 	MetaData   tsDailyAdjMd          `json:"Meta Data"`
 	TimeSeries map[string]tsDailyAdj `json:"Time Series (Daily)"`
+}
+
+func init() {
+	avAPIKey := os.Getenv("AV_API_KEY")
+	if avAPIKey == "" {
+		log.Fatal("You must specify your API key from AlphaVantage as AV_API_KEY.")
+	}
+	LaunchAV(avAPIKey)
 }
 
 func GetPrice(symbol string, date time.Time) (float64, error) {
@@ -108,9 +122,23 @@ func getTsDailyAdj(symbol string) tsDailyAdjResp {
 	return resp
 }
 
-func LaunchRequester(inAvAPIKey string) {
+func LaunchAV(inAvAPIKey string) {
+	signal.Notify(SigChan, os.Interrupt)
+
 	avAPIKey = inAvAPIKey
 	go limitQueryRate()
+
+	cwd, pathErr := os.Getwd()
+
+	if pathErr != nil {
+		log.Println(pathErr, ", will not load/save cache.")
+		return
+	}
+
+	cachePath = path.Join(cwd, cacheFile)
+	loadCache(cachePath)
+	go shutdown(cachePath)
+
 }
 
 func limitQueryRate() {
@@ -118,4 +146,48 @@ func limitQueryRate() {
 		rateLimitOk <- true
 		time.Sleep(apiTimeout)
 	}
+}
+
+func shutdown(path string) {
+	<-SigChan
+	log.Println("Saving cache on disk")
+	saveCache(path)
+	os.Exit(0)
+}
+
+func saveCache(path string) {
+	cache.RLock()
+	cacheJSON, jsonErr := json.MarshalIndent(cache.m, "", "    ")
+	cache.RUnlock()
+
+	if jsonErr != nil {
+		log.Println(jsonErr)
+		return
+	}
+
+	ioutil.WriteFile(path, cacheJSON, 0644)
+	log.Println("Wrote cache to ", path)
+}
+
+func loadCache(path string) {
+	cacheStr, readErr := ioutil.ReadFile(path)
+
+	if readErr != nil {
+		log.Println(readErr, ", will continue without loaded cache.")
+		return
+	}
+
+	cache.Lock()
+	jsonErr := json.Unmarshal(cacheStr, &cache.m)
+
+	if jsonErr != nil {
+		log.Println(jsonErr)
+	} else {
+		log.Println("Cache loaded, symbols:")
+		for k := range cache.m {
+			log.Print(k)
+		}
+	}
+
+	cache.Unlock()
 }
