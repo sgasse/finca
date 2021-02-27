@@ -1,6 +1,8 @@
 package sim
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"math"
 	"time"
@@ -8,80 +10,149 @@ import (
 	"github.com/sgasse/finca/av"
 )
 
-var fixedFeePerStock = 7.0
+var fixedFeePerStock = 56.0
 
 type Stock struct {
 	Symbol string
 	WKN    string
 	ISIN   string
-	Volume int64
 }
 
-type portfolio interface {
+type transaction interface {
+	delta() float64
+}
+
+type incomeTransaction struct {
+	date   time.Time
+	amount float64
+}
+
+type stockTransaction struct {
+	date        time.Time
+	stock       *Stock
+	deltaVolume int64
+	price       float64
+}
+
+type Portfolio interface {
+	SetStart(time.Time)
 	rebalance(float64, time.Time) error
 	getCashBalance() float64
-	transact(float64)
-	Evaluate(time.Time) float64
-}
-
-type singlePortfolio struct {
-	stock             Stock
-	cash              float64
-	receivedDividends float64
+	transact(transaction)
+	Evaluate(time.Time, bool) float64
 }
 
 type multiPortfolio struct {
-	stocks            []Stock
-	cash              float64
-	receivedDividends float64
+	startDate    time.Time
+	cash         float64
+	stocks       map[*Stock]int64
+	transactions []transaction
+	goalRatios   map[*Stock]float64
 }
 
-func NewSinglePortfolio(stock Stock, cash float64) portfolio {
-	return &singlePortfolio{stock: stock, cash: cash, receivedDividends: 0.0}
+func NewMultiPortfolio(cash float64, stocks map[*Stock]int64, goalRatios map[*Stock]float64) (Portfolio, error) {
+	ratioSum := 0.0
+	for stock, ratio := range goalRatios {
+		ratioSum += ratio
+
+		_, ok := stocks[stock]
+		if !ok {
+			msg := fmt.Sprint("Stock ", stock.Symbol, " found in goalRatios but not in stocks.")
+			return &multiPortfolio{},
+				errors.New(msg)
+		}
+	}
+
+	if len(stocks) > len(goalRatios) {
+		return &multiPortfolio{}, errors.New("Some stocks are missing a goal ratio.")
+	}
+
+	if math.Abs(ratioSum-1.0) > 1e-6 {
+		return &multiPortfolio{}, errors.New("Goal ratios do not sum up to 1.0")
+	}
+	return &multiPortfolio{cash: cash, stocks: stocks, goalRatios: goalRatios}, nil
 }
 
-func (p *singlePortfolio) rebalance(reinvest float64, date time.Time) error {
-	// Get price for only stock
-	price, err := av.GetPrice(p.stock.Symbol, date)
+func (t *stockTransaction) delta() float64 {
+	return -float64(t.deltaVolume) * t.price
+}
+
+func (t *incomeTransaction) delta() float64 {
+	return t.amount
+}
+
+func (p *multiPortfolio) SetStart(date time.Time) {
+	p.startDate = date
+}
+
+func (p *multiPortfolio) rebalance(amount float64, date time.Time) error {
+	// Naiv, safe, suboptimal rebalancing
+	curTotalStockValue, err := getTotalStockValue(p.stocks, date)
 	if err != nil {
 		return err
 	}
 
-	buyingFees := fixedFeePerStock
-
-	newStocks := math.Floor((reinvest - buyingFees) / price)
-	expense := newStocks*price + buyingFees
-
-	// Commit
-	p.stock.Volume += int64(newStocks)
-	p.cash -= expense
-	//log.Println("On simDay", date)
-	//log.Println("Rebalancing bought ", int64(newStocks), " new stocks for ", expense)
-	//log.Println("Volume: ", p.stock.Volume, " | Cash: ", p.cash)
+	fees := float64(len(p.stocks)) * fixedFeePerStock
+	totalGoalValue := curTotalStockValue + amount - fees
+	for stock, curVol := range p.stocks {
+		// All prices have to exist for the call to `getTotalStockValue` to succeed
+		price, _ := av.GetPrice(stock.Symbol, date)
+		goalValue := p.goalRatios[stock] * totalGoalValue
+		goalShares := int64(math.Floor(goalValue / price))
+		newShares := goalShares - curVol
+		adjustedPrice := price + fixedFeePerStock/float64(newShares)
+		tr := &stockTransaction{
+			date:        date,
+			stock:       stock,
+			deltaVolume: newShares,
+			price:       adjustedPrice,
+		}
+		p.transact(tr)
+	}
 
 	return nil
 }
 
-func (p *singlePortfolio) getCashBalance() float64 {
+func (p *multiPortfolio) getCashBalance() float64 {
 	return p.cash
 }
 
-func (p *singlePortfolio) transact(amount float64) {
-	p.cash += amount
+func (p *multiPortfolio) transact(tr transaction) {
+	p.transactions = append(p.transactions, tr)
+	p.cash = p.cash + tr.delta()
+	if st, ok := tr.(*stockTransaction); ok {
+		p.stocks[st.stock] += st.deltaVolume
+	}
 }
 
-func (p *singlePortfolio) Evaluate(date time.Time) float64 {
-	price, err := av.GetPrice(p.stock.Symbol, date)
+func (p *multiPortfolio) Evaluate(date time.Time, output bool) float64 {
+	if output {
+	}
+
+	totalStockValue, err := getTotalStockValue(p.stocks, date)
 	if err != nil {
 		log.Fatal(err)
 	}
-	stockValue := float64(p.stock.Volume) * price
-	totalValue := p.cash + stockValue
 
-	log.Println("Portfolio:")
-	log.Println(p.stock.Symbol, ": ", p.stock.Volume, " x ", price, " = ", stockValue)
-	log.Println("Cash: ", p.cash)
-	log.Println("Total: ", totalValue)
+	totalValue := p.cash + totalStockValue
+	if output {
+		//fmt.Print("Portfolio Value\n")
+		//fmt.Printf("Total stock value: %.2f\n", totalStockValue)
+		//fmt.Printf("Total cash: %.2f\n", p.cash)
+		fmt.Printf("Total value: %.2f\n\n", totalValue)
+	}
 
 	return totalValue
+}
+
+func getTotalStockValue(stocks map[*Stock]int64, date time.Time) (float64, error) {
+	totalStockValue := 0.0
+	for stock, vol := range stocks {
+		price, err := av.GetPrice(stock.Symbol, date)
+		if err != nil {
+			return 0.0, err
+		}
+		totalStockValue += float64(vol) * price
+	}
+	return totalStockValue, nil
 }

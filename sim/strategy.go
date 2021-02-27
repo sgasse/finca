@@ -3,7 +3,7 @@ package sim
 import "time"
 
 type Strategy interface {
-	tick(time.Time, portfolio)
+	tick(time.Time, Portfolio)
 }
 
 type MidMonth struct {
@@ -24,7 +24,7 @@ func NewMonthlyStrategy(startDate time.Time) Strategy {
 	}
 }
 
-func (mm *MidMonth) tick(date time.Time, p portfolio) {
+func (mm *MidMonth) tick(date time.Time, p Portfolio) {
 	if !investedThisMonth(date, mm.lastInvested) {
 		if date.Day() > mm.minDay {
 			// Attempt invest
@@ -50,7 +50,7 @@ func NewFixedMonthsStrategy(startDate time.Time, months []time.Month) Strategy {
 	}
 }
 
-func (fm *FixedMonths) tick(date time.Time, p portfolio) {
+func (fm *FixedMonths) tick(date time.Time, p Portfolio) {
 	if _, ok := fm.investMonths[date.Month()]; ok {
 		if !investedThisMonth(date, fm.lastInvested) {
 			if date.Day() >= fm.minDay {

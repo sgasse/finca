@@ -47,8 +47,9 @@ type tsDailyAdj struct {
 }
 
 type tsDailyAdjResp struct {
-	MetaData   tsDailyAdjMd          `json:"Meta Data"`
-	TimeSeries map[string]tsDailyAdj `json:"Time Series (Daily)"`
+	MetaData    tsDailyAdjMd          `json:"Meta Data"`
+	TimeSeries  map[string]tsDailyAdj `json:"Time Series (Daily)"`
+	LastQueried time.Time             `json:"lastQueried"`
 }
 
 func init() {
@@ -59,24 +60,36 @@ func init() {
 	LaunchAV(avAPIKey)
 }
 
-func GetPrice(symbol string, date time.Time) (float64, error) {
-	// Check if data for symbol exists
-	cache.RLock()
-	tsData, ok := cache.m[symbol]
-	cache.RUnlock()
-	if !ok {
-		// Try to get the price for the symbol
-		client := http.Client{Timeout: time.Second * 5}
-		tsData, err := getTsDailyAdj(symbol, &client)
-		if err != nil {
-			return 0.0, err
-		}
-
-		// Cache entry
-		cache.Lock()
-		cache.m[symbol] = tsData
-		cache.Unlock()
+func GetDividend(symbol string, date time.Time) (float64, error) {
+	// Ensure latest data is available
+	err := maybeUpdateCacheSymbol(symbol)
+	if err != nil {
+		return 0.0, err
 	}
+
+	cache.RLock()
+	// Existance of symbol was ensured in `maybeUpdateCacheSymbol`
+	tsData, _ := cache.m[symbol]
+	cache.RUnlock()
+
+	dailyData, ok := tsData.TimeSeries[date.Format("2006-01-02")]
+	if !ok {
+		return 0.0, nil
+	}
+	return dailyData.DividendAmount, nil
+}
+
+func GetPrice(symbol string, date time.Time) (float64, error) {
+	// Ensure latest data is available
+	err := maybeUpdateCacheSymbol(symbol)
+	if err != nil {
+		return 0.0, err
+	}
+
+	cache.RLock()
+	// Existance of symbol was ensured in `maybeUpdateCacheSymbol`
+	tsData, _ := cache.m[symbol]
+	cache.RUnlock()
 
 	// Check for price on the exact date or up to one week previously
 	for i := 0; i <= 7; i++ {
@@ -86,6 +99,7 @@ func GetPrice(symbol string, date time.Time) (float64, error) {
 			return dailyData.AdjustedClose, nil
 		}
 	}
+	//log.Print("No price found")
 	return 0.0, errors.New(fmt.Sprint("Could not find a price for ", symbol))
 }
 
@@ -97,6 +111,37 @@ func avURL(symbol string, APIKey string) string {
 	return fmt.Sprintf("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=%s&outputsize=full&apikey=%s",
 		symbol, avAPIKey)
 
+}
+
+func maybeUpdateCacheSymbol(symbol string) error {
+	// Check if data for symbol exists
+	cache.RLock()
+	tsData, entryFound := cache.m[symbol]
+	cache.RUnlock()
+
+	tooOld := false
+	if entryFound {
+		if tsData.LastQueried.Before(time.Now().Truncate(24 * time.Hour)) {
+			// Cache too old, re-query
+			tooOld = true
+		}
+	}
+
+	if !entryFound || tooOld {
+		// Try to get the price for the symbol
+		client := http.Client{Timeout: time.Second * 5}
+		tsData, err := getTsDailyAdj(symbol, &client)
+		if err != nil {
+			return err
+		}
+		tsData.LastQueried = time.Now()
+
+		// Cache entry
+		cache.Lock()
+		cache.m[symbol] = tsData
+		cache.Unlock()
+	}
+	return nil
 }
 
 func getTsDailyAdj(symbol string, client qClient) (resp tsDailyAdjResp, err error) {
@@ -191,10 +236,26 @@ func loadCache(path string) {
 		log.Println(jsonErr)
 	} else {
 		log.Println("Cache loaded, symbols:")
-		for k := range cache.m {
-			log.Print(k)
+		for k, tsData := range cache.m {
+			earliest, latest := getDateRange(tsData.TimeSeries)
+			log.Println(k, ": ", len(tsData.TimeSeries), " entries, ", earliest, "-", latest)
 		}
 	}
 
 	cache.Unlock()
+}
+
+func getDateRange(ts map[string]tsDailyAdj) (earliest, latest string) {
+	earliest = time.Now().Format("2006-01-02")
+	latest = "1900-01-01"
+
+	for k := range ts {
+		if k < earliest {
+			earliest = k
+		}
+		if k > latest {
+			latest = k
+		}
+	}
+	return
 }

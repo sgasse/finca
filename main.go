@@ -8,8 +8,9 @@ import (
 )
 
 func main() {
+	// example.PrintPrices()
 	example.SimulateMonthly()
-	example.SimulateBiYearly()
+	example.LoopBiYearly()
 
 	av.SigChan <- os.Interrupt
 	// sending os.Interrupt to SigChan will exit

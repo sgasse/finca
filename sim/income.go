@@ -22,7 +22,6 @@ func (mi *MonthlyIncome) tick(date time.Time) float64 {
 		return mi.monthlyAmount
 	}
 	return 0.0
-
 }
 
 func NewIncome(startDate time.Time, amount float64) Income {
