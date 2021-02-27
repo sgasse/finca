@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sgasse/finca/av"
 	"github.com/sgasse/finca/sim"
-	"github.com/sgasse/finca/stockdata"
 )
 
 func printPrice(symbol string, date string) {
 	dateT, _ := time.Parse("2006-01-02", date)
-	price, err := stockdata.GetPrice(symbol, dateT)
+	price, err := av.GetPrice(symbol, dateT)
 
 	if err != nil {
 		fmt.Println(err.Error())

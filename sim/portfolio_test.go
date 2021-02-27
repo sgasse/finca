@@ -1,6 +1,10 @@
 package sim
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestSinglePortfolio(t *testing.T) {
 	stock := Stock{Symbol: "IBM", Volume: 5}
@@ -8,14 +12,14 @@ func TestSinglePortfolio(t *testing.T) {
 	p := NewSinglePortfolio(stock, startCash)
 
 	if sp, ok := p.(*singlePortfolio); ok {
-		assertEqual(t, sp.cash, startCash, "Cash in portfolio differs")
-		assertEqual(t, sp.stock.Symbol, "IBM", "Wrong symbol in stock")
-		assertEqual(t, sp.stock.Volume, int64(5), "Wrong stock volume")
+		assert.Equal(t, startCash, sp.cash, "Cash in portfolio differs")
+		assert.Equal(t, "IBM", sp.stock.Symbol, "Wrong symbol in stock")
+		assert.Equal(t, int64(5), sp.stock.Volume, "Wrong stock volume")
 
-		assertEqual(t, sp.getCashBalance(), startCash, "Wrong cash balance")
+		assert.Equal(t, startCash, sp.getCashBalance(), "Wrong cash balance")
 
 		sp.transact(10.0)
-		assertEqual(t, sp.cash, 133.45, "Transaction resulted in wrong cash balance")
-		assertEqual(t, sp.getCashBalance(), 133.45, "Transaction resulted in wrong cash balance")
+		assert.Equal(t, 133.45, sp.cash, "Transaction resulted in wrong cash balance")
+		assert.Equal(t, 133.45, sp.getCashBalance(), "Transaction resulted in wrong cash balance")
 	}
 }

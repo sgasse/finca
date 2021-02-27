@@ -2,40 +2,36 @@ package sim
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-type fakePortfolio struct {
-	cash                 float64
-	calledRebalance      bool
-	calledGetCashBalance bool
-	calledTransact       bool
-	reinvestArg          float64
-	dateArg              time.Time
-	amountArg            float64
-	errOnRebalance       bool
+type mockPortfolio struct {
+	mock.Mock
+	cash float64
 }
 
-func (fp *fakePortfolio) rebalance(reinvest float64, date time.Time) error {
-	fp.calledRebalance = true
-	fp.reinvestArg = reinvest
-	fp.dateArg = date
-	if fp.errOnRebalance {
-		return errors.New("Error")
-	}
-	return nil
+func (m *mockPortfolio) rebalance(reinvest float64, date time.Time) error {
+	args := m.Called(reinvest, date)
+	return args.Error(0)
 }
 
-func (fp *fakePortfolio) getCashBalance() float64 {
-	fp.calledGetCashBalance = true
-	return fp.cash
+func (m *mockPortfolio) getCashBalance() float64 {
+	args := m.Called()
+	return args.Get(0).(float64)
 }
 
-func (fp *fakePortfolio) transact(amount float64) {
-	fp.calledTransact = true
-	fp.amountArg = amount
-	fp.cash += amount
+func (m *mockPortfolio) transact(amount float64) {
+	_ = m.Called(amount)
+}
+
+func (m *mockPortfolio) Evaluate(date time.Time) float64 {
+	args := m.Called(date)
+	return args.Get(0).(float64)
 }
 
 func TestNewStrategy(t *testing.T) {
@@ -43,11 +39,10 @@ func TestNewStrategy(t *testing.T) {
 	strat := NewMonthlyStrategy(startDate)
 
 	if midM, ok := strat.(*MidMonth); ok {
-		lastInvDate := midM.lastInvested.Format("2006-01-02")
 		expectedDate := "2020-05-01"
-		if lastInvDate != expectedDate {
-			t.Error("Expected lastInvested to be initialized to ", expectedDate, ", got ", lastInvDate)
-		}
+
+		assert.Equal(t, "2020-05-01", midM.lastInvested.Format("2006-01-02"),
+			fmt.Sprint("Expected last invest date to be initialized to ", expectedDate))
 	}
 }
 
@@ -56,21 +51,23 @@ func TestStrategyTick(t *testing.T) {
 	strat := NewMonthlyStrategy(startDate)
 
 	if midM, ok := strat.(*MidMonth); ok {
-		fp1 := &fakePortfolio{cash: 333.0}
-		midM.tick(time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC), fp1)
-		assertEqual(t, fp1.calledRebalance, false, "Should not have called rebalance")
+		mp1 := &mockPortfolio{cash: 333.0}
+		evalDay := time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC)
+		midM.tick(evalDay, mp1)
+		mp1.AssertNotCalled(t, "rebalance", evalDay)
 
 		investDay := time.Date(2020, 6, 15, 0, 0, 0, 0, time.UTC)
-		midM.tick(investDay, fp1)
-		assertEqual(t, fp1.calledRebalance, true, "Should have called rebalance")
-		assertEqual(t, fp1.calledGetCashBalance, true, "Should have called getCashBalance")
-		assertEqual(t, fp1.reinvestArg, 333.0, "Wrong reinvest sum")
-		assertEqual(t, fp1.dateArg, investDay, "Wrong investment day")
+		mp1.On("rebalance", mp1.cash, investDay).Return(nil)
+		mp1.On("getCashBalance").Return(mp1.cash)
+		midM.tick(investDay, mp1)
+		mp1.AssertExpectations(t)
 
-		fp2 := &fakePortfolio{cash: 123.0, errOnRebalance: true}
-		midM.tick(time.Date(2020, 8, 16, 0, 0, 0, 0, time.UTC), fp2)
-		assertEqual(t, fp2.calledRebalance, true, "Should have called rebalance")
-		assertEqual(t, fp2.calledGetCashBalance, true, "Should have called getCashBalanace")
-		assertEqual(t, midM.lastInvested, investDay, "lastInvested should not have changed")
+		mp2 := &mockPortfolio{cash: 123.3}
+		evalDay = time.Date(2020, 8, 16, 0, 0, 0, 0, time.UTC)
+		mp2.On("rebalance", mp2.cash, evalDay).Return(errors.New("Test error"))
+		mp2.On("getCashBalance").Return(mp2.cash)
+		midM.tick(evalDay, mp2)
+		mp2.AssertExpectations(t)
+		assert.Equal(t, investDay, midM.lastInvested, "The last investment day should not have changed")
 	}
 }

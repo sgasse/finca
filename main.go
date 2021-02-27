@@ -3,18 +3,18 @@ package main
 import (
 	"os"
 
+	"github.com/sgasse/finca/av"
 	"github.com/sgasse/finca/example"
-	"github.com/sgasse/finca/stockdata"
 )
 
 func main() {
 	example.SimulateMonthly()
 	example.SimulateBiYearly()
 
-	stockdata.SigChan <- os.Interrupt
+	av.SigChan <- os.Interrupt
 	// sending os.Interrupt to SigChan will exit
-	// the line below is never reached but waits for stockdata.shutdown()
-	<-stockdata.SigChan
+	// the line below is never reached but waits for av.shutdown()
+	<-av.SigChan
 }
 
 // TODO
@@ -23,3 +23,5 @@ func main() {
 // Find earliest possible date for all prices in portfolio
 // Plotting of performance?
 // Dividends?
+// Declare cache outdated
+// Migrate to testify?

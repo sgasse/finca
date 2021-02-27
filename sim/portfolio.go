@@ -5,7 +5,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/sgasse/finca/stockdata"
+	"github.com/sgasse/finca/av"
 )
 
 var fixedFeePerStock = 7.0
@@ -42,7 +42,7 @@ func NewSinglePortfolio(stock Stock, cash float64) portfolio {
 
 func (p *singlePortfolio) rebalance(reinvest float64, date time.Time) error {
 	// Get price for only stock
-	price, err := stockdata.GetPrice(p.stock.Symbol, date)
+	price, err := av.GetPrice(p.stock.Symbol, date)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (p *singlePortfolio) transact(amount float64) {
 }
 
 func (p *singlePortfolio) Evaluate(date time.Time) float64 {
-	price, err := stockdata.GetPrice(p.stock.Symbol, date)
+	price, err := av.GetPrice(p.stock.Symbol, date)
 	if err != nil {
 		log.Fatal(err)
 	}

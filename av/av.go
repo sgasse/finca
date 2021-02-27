@@ -1,4 +1,4 @@
-package stockdata
+package av
 
 import (
 	"encoding/json"
@@ -63,14 +63,19 @@ func GetPrice(symbol string, date time.Time) (float64, error) {
 	// Check if data for symbol exists
 	cache.RLock()
 	tsData, ok := cache.m[symbol]
+	cache.RUnlock()
 	if !ok {
-		cache.RUnlock()
+		// Try to get the price for the symbol
+		client := http.Client{Timeout: time.Second * 5}
+		tsData, err := getTsDailyAdj(symbol, &client)
+		if err != nil {
+			return 0.0, err
+		}
+
+		// Cache entry
 		cache.Lock()
-		cache.m[symbol] = getTsDailyAdj(symbol)
-		tsData = cache.m[symbol]
+		cache.m[symbol] = tsData
 		cache.Unlock()
-	} else {
-		cache.RUnlock()
 	}
 
 	// Check for price on the exact date or up to one week previously
@@ -84,49 +89,51 @@ func GetPrice(symbol string, date time.Time) (float64, error) {
 	return 0.0, errors.New(fmt.Sprint("Could not find a price for ", symbol))
 }
 
-func getTsDailyAdj(symbol string) tsDailyAdjResp {
+type qClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+func avURL(symbol string, APIKey string) string {
+	return fmt.Sprintf("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=%s&outputsize=full&apikey=%s",
+		symbol, avAPIKey)
+
+}
+
+func getTsDailyAdj(symbol string, client qClient) (resp tsDailyAdjResp, err error) {
 	<-rateLimitOk
 	log.Print("Fetching daily adjusted time series data for symbol ", symbol)
 
-	url := fmt.Sprintf("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=%s&outputsize=full&apikey=%s",
-		symbol, avAPIKey)
-
-	client := http.Client{Timeout: time.Second * 5}
+	url := avURL(symbol, avAPIKey)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
-	res, getErr := client.Do(req)
-	if getErr != nil {
-		fmt.Println(getErr)
+	res, err := client.Do(req)
+	if err != nil {
+		return
 	}
 
 	if res.Body != nil {
 		defer res.Body.Close()
 	}
 
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		fmt.Println(readErr)
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return
 	}
 
-	var resp tsDailyAdjResp
-
-	jsonErr := json.Unmarshal(body, &resp)
-	if jsonErr != nil {
-		fmt.Println(jsonErr)
-	}
-
-	return resp
+	err = json.Unmarshal(body, &resp)
+	return
 }
 
 func LaunchAV(inAvAPIKey string) {
 	signal.Notify(SigChan, os.Interrupt)
 
 	avAPIKey = inAvAPIKey
-	go limitQueryRate()
+	go limitQueryRate(apiTimeout)
 
 	cwd, pathErr := os.Getwd()
 
@@ -141,10 +148,10 @@ func LaunchAV(inAvAPIKey string) {
 
 }
 
-func limitQueryRate() {
+func limitQueryRate(timeout time.Duration) {
 	for {
 		rateLimitOk <- true
-		time.Sleep(apiTimeout)
+		time.Sleep(timeout)
 	}
 }
 
