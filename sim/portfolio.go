@@ -39,7 +39,7 @@ type Portfolio interface {
 	rebalance(float64, time.Time) error
 	getCashBalance() float64
 	transact(transaction)
-	Evaluate(time.Time, bool) float64
+	Evaluate(time.Time, bool) (float64, float64)
 }
 
 type multiPortfolio struct {
@@ -125,7 +125,7 @@ func (p *multiPortfolio) transact(tr transaction) {
 	}
 }
 
-func (p *multiPortfolio) Evaluate(date time.Time, output bool) float64 {
+func (p *multiPortfolio) Evaluate(date time.Time, output bool) (float64, float64) {
 	if output {
 	}
 
@@ -135,14 +135,19 @@ func (p *multiPortfolio) Evaluate(date time.Time, output bool) float64 {
 	}
 
 	totalValue := p.cash + totalStockValue
+
+	fx := buildTransactionFunc(p.transactions, totalValue, date)
+	irr := bisect(fx, 5.0, 1.01, 1e-3, 100)
+
 	if output {
 		//fmt.Print("Portfolio Value\n")
 		//fmt.Printf("Total stock value: %.2f\n", totalStockValue)
 		//fmt.Printf("Total cash: %.2f\n", p.cash)
-		fmt.Printf("Total value: %.2f\n\n", totalValue)
+		fmt.Printf("Total value: %.2f\n", totalValue)
+		fmt.Printf("Internal rate of return %.4f\n\n", irr)
 	}
 
-	return totalValue
+	return totalValue, irr
 }
 
 func getTotalStockValue(stocks map[*Stock]int64, date time.Time) (float64, error) {
@@ -155,4 +160,43 @@ func getTotalStockValue(stocks map[*Stock]int64, date time.Time) (float64, error
 		totalStockValue += float64(vol) * price
 	}
 	return totalStockValue, nil
+}
+
+func bisect(fn func(float64) float64, high float64, low float64, prec float64, maxIter int) float64 {
+	steps := 0
+	x := low + (high-low)/2
+	for diff := fn(x); math.Abs(diff) > prec && steps <= maxIter; {
+		if diff > 0 {
+			// x too large, narrow upper limit
+			high = x
+		} else {
+			// x too small, narrow lower limit
+			low = x
+		}
+		x = low + (high-low)/2
+		diff = fn(x)
+
+		steps++
+	}
+
+	if steps == maxIter && fn(x) > prec {
+		fmt.Println("Warning: maxIter (", maxIter, ") reached without converging")
+	}
+	return x
+}
+
+func buildTransactionFunc(trs []transaction, cEnd float64, date time.Time) func(float64) float64 {
+	yearHours := 365.0 * 24.0
+	fn := func(x float64) float64 {
+		res := -cEnd
+		for _, tr := range trs {
+			if stockTr, ok := tr.(*stockTransaction); ok {
+				dt := date.Sub(stockTr.date).Hours() / yearHours
+				res += stockTr.price * float64(stockTr.deltaVolume) * math.Pow(x, dt)
+			}
+		}
+
+		return res
+	}
+	return fn
 }
