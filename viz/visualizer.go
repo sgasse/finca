@@ -36,12 +36,12 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		monthly := sim.NewMonthlyStrategy(startDate)
 		pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, monthly)
 		cData.Dates = dates
-		cData.ValueOverTime["MonthlyInvest"] = pValues
-		cData.IRR["MonthlyInvest"] = irr
+		cData.ValueOverTime["Monthly"] = pValues
+		cData.IRR["Monthly"] = irr
 
 		for i := 1; i <= 6; i++ {
 			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i), time.Month(i + 6)})
-			name := fmt.Sprint("Invest", time.Month(i), "And", time.Month(i+6))
+			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
 
 			pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, strat)
 			cData.Dates = dates
