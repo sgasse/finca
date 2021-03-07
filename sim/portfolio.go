@@ -39,7 +39,8 @@ type Portfolio interface {
 	rebalance(float64, time.Time) error
 	getCashBalance() float64
 	transact(transaction)
-	Evaluate(time.Time, bool) (float64, float64)
+	TotalValue(time.Time) float64
+	CalcIRR(time.Time) float64
 }
 
 type multiPortfolio struct {
@@ -125,10 +126,7 @@ func (p *multiPortfolio) transact(tr transaction) {
 	}
 }
 
-func (p *multiPortfolio) Evaluate(date time.Time, output bool) (float64, float64) {
-	if output {
-	}
-
+func (p *multiPortfolio) TotalValue(date time.Time) float64 {
 	totalStockValue, err := getTotalStockValue(p.stocks, date)
 	if err != nil {
 		log.Fatal(err)
@@ -136,18 +134,7 @@ func (p *multiPortfolio) Evaluate(date time.Time, output bool) (float64, float64
 
 	totalValue := p.cash + totalStockValue
 
-	fx := buildTransactionFunc(p.transactions, totalValue, date)
-	irr := bisect(fx, 5.0, 1.01, 1e-3, 100)
-
-	if output {
-		//fmt.Print("Portfolio Value\n")
-		//fmt.Printf("Total stock value: %.2f\n", totalStockValue)
-		//fmt.Printf("Total cash: %.2f\n", p.cash)
-		fmt.Printf("Total value: %.2f\n", totalValue)
-		fmt.Printf("Internal rate of return %.4f\n\n", irr)
-	}
-
-	return totalValue, irr
+	return totalValue
 }
 
 func getTotalStockValue(stocks map[*Stock]int64, date time.Time) (float64, error) {
@@ -160,6 +147,13 @@ func getTotalStockValue(stocks map[*Stock]int64, date time.Time) (float64, error
 		totalStockValue += float64(vol) * price
 	}
 	return totalStockValue, nil
+}
+
+func (p *multiPortfolio) CalcIRR(date time.Time) float64 {
+	totalValue := p.TotalValue(date)
+	fx := buildTransactionFunc(p.transactions, totalValue, date)
+	irr := bisect(fx, 5.0, 1.0, 1e-3, 100)
+	return irr
 }
 
 func bisect(fn func(float64) float64, high float64, low float64, prec float64, maxIter int) float64 {

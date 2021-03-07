@@ -25,7 +25,7 @@ func (m *mockPortfolio) transact(amount float64) {
 	_ = m.Called(amount)
 }
 
-func (m *mockPortfolio) Evaluate(date time.Time) float64 {
+func (m *mockPortfolio) TotalValue(date time.Time) float64 {
 	args := m.Called(date)
 	return args.Get(0).(float64)
 }
