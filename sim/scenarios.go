@@ -25,33 +25,17 @@ func getRefPortfolio() Portfolio {
 	return p
 }
 
-func SimulateMonthly(startDate time.Time) ([]float64, []string) {
-	// startDate := time.Date(2011, 6, 1, 10, 0, 0, 0, time.UTC)
+func SimulateStrategyOnRef(startDate time.Time, strat Strategy) ([]float64, []string, float64) {
 	p := getRefPortfolio()
 
 	inc := NewIncome(startDate, 1000.0)
-
-	strat := NewMonthlyStrategy(startDate)
 
 	pValues, dates, err := Simulate(startDate, p, inc, strat)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return pValues, dates
-}
+	irr := p.CalcIRR(time.Now())
 
-func SimulateBiYearly(startDate time.Time, firstMonth time.Month) ([]float64, []string) {
-	p := getRefPortfolio()
-
-	inc := NewIncome(startDate, 1000.0)
-
-	strat := NewFixedMonthsStrategy(startDate, []time.Month{firstMonth, firstMonth + 6})
-
-	pValues, dates, err := Simulate(startDate, p, inc, strat)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return pValues, dates
+	return pValues, dates, irr
 }

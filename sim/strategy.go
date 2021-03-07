@@ -17,6 +17,9 @@ type FixedMonths struct {
 	minDay       int
 }
 
+type NoInvest struct {
+}
+
 func NewMonthlyStrategy(startDate time.Time) Strategy {
 	return &MidMonth{
 		lastInvested: startDate.Add(-31 * 24 * time.Hour),
@@ -64,6 +67,9 @@ func (fm *FixedMonths) tick(date time.Time, p Portfolio) {
 			}
 		}
 	}
+}
+
+func (s *NoInvest) tick(date time.Time, p Portfolio) {
 }
 
 func investedThisMonth(date time.Time, lastInvested time.Time) bool {

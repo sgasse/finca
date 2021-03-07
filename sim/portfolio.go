@@ -153,6 +153,8 @@ func (p *multiPortfolio) CalcIRR(date time.Time) float64 {
 	totalValue := p.TotalValue(date)
 	fx := buildTransactionFunc(p.transactions, totalValue, date)
 	irr := bisect(fx, 5.0, 1.0, 1e-3, 100)
+	// Transform to percent
+	irr = (irr - 1.0) * 100
 	return irr
 }
 

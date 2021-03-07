@@ -10,7 +10,7 @@
 
 <body>
     <!-- prepare a DOM container with width and height -->
-    <div id="main" style="width: 1200px;height:800px;"></div>
+    <div id="main" style="width: 900px;height:600px;"></div>
     <script type="text/javascript">
         var chartDom = document.getElementById('main');
         var myChart = echarts.init(chartDom);
@@ -27,7 +27,7 @@
                 }
             },
             legend: {
-                data: [{{range $k, $v := .Values}}{{ $k }},{{ end }}]
+                data: [{{ range $k, $v := .ValueOverTime }}{{ $k }},{{ end }}]
             },
             xAxis: {
                 type: 'category',
@@ -52,7 +52,7 @@
                 }
             ],
             series: [
-                {{ range $name, $vals := .Values }}
+                {{ range $name, $vals := .ValueOverTime }}
                     {
                         name: {{ $name }},
                         data: {{ $vals }},

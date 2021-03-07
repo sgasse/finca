@@ -12,8 +12,10 @@ import (
 )
 
 type chartData struct {
-	Dates  []string
-	Values map[string][]float64
+	Dates         []string
+	ValueOverTime map[string][]float64
+	EndValues     map[string]float64
+	IRR           map[string]float64
 }
 
 func compareHandler(w http.ResponseWriter, r *http.Request) {
@@ -23,23 +25,35 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 
+		cData := chartData{
+			ValueOverTime: make(map[string][]float64),
+			EndValues:     make(map[string]float64),
+			IRR:           make(map[string]float64),
+		}
+
 		startDate := time.Date(2011, 6, 1, 10, 0, 0, 0, time.UTC)
 
-		values := make(map[string][]float64)
-
-		pValues, dates := sim.SimulateMonthly(startDate)
-		values["MonthlyInvest"] = pValues
+		monthly := sim.NewMonthlyStrategy(startDate)
+		pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, monthly)
+		cData.Dates = dates
+		cData.ValueOverTime["MonthlyInvest"] = pValues
+		cData.IRR["MonthlyInvest"] = irr
 
 		for i := 1; i <= 6; i++ {
-			pValues, dates = sim.SimulateBiYearly(startDate, time.Month(i))
+			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i), time.Month(i + 6)})
 			name := fmt.Sprint("Invest", time.Month(i), "And", time.Month(i+6))
-			values[name] = pValues
+
+			pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, strat)
+			cData.Dates = dates
+			cData.ValueOverTime[name] = pValues
+			cData.IRR[name] = irr
 		}
 
-		cData := chartData{
-			Dates:  dates,
-			Values: values,
-		}
+		noInvest := &sim.NoInvest{}
+		pValues, dates, irr = sim.SimulateStrategyOnRef(startDate, noInvest)
+		cData.Dates = dates
+		cData.ValueOverTime["NoInvest"] = pValues
+		cData.IRR["NoInvest"] = irr
 
 		t.Execute(w, &cData)
 	}
