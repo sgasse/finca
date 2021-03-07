@@ -53,7 +53,7 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		pValues, dates, irr = sim.SimulateStrategyOnRef(startDate, noInvest)
 		cData.Dates = dates
 		cData.ValueOverTime["NoInvest"] = pValues
-		cData.IRR["NoInvest"] = irr
+		cData.IRR["NoInvest"] = 0.0
 
 		t.Execute(w, &cData)
 	}

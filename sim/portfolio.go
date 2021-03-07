@@ -155,6 +155,8 @@ func (p *multiPortfolio) CalcIRR(date time.Time) float64 {
 	irr := bisect(fx, 5.0, 1.0, 1e-3, 100)
 	// Transform to percent
 	irr = (irr - 1.0) * 100
+	// Round to two digits after the comma
+	irr = math.Round(irr*100) / 100
 	return irr
 }
 
