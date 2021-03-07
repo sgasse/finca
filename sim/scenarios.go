@@ -6,7 +6,7 @@ import (
 )
 
 func getRefPortfolio() Portfolio {
-	sACWI := &Stock{Symbol: "SPYI.DE"}
+	sACWI := &Stock{Symbol: "SPY"}
 
 	stocks := map[*Stock]int64{
 		sACWI: 0,

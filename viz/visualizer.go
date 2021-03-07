@@ -31,7 +31,7 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 			IRR:           make(map[string]float64),
 		}
 
-		startDate := time.Date(2011, 6, 1, 10, 0, 0, 0, time.UTC)
+		startDate := time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)
 
 		monthly := sim.NewMonthlyStrategy(startDate)
 		pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, monthly)
