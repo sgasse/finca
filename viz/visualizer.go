@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/sgasse/finca/av"
 	"github.com/sgasse/finca/sim"
 )
 
@@ -23,6 +25,11 @@ type chartData struct {
 	ValueOverTime map[string][]float64
 	EndValues     map[string]float64
 	IRR           map[string]float64
+	StockDates    []string
+	StockVals     []float64
+	StockRelVal   []float64
+	StockMaxDD    []float64
+	Symbol        string
 }
 
 func addSimResults(cData *chartData, strat sim.Strategy, name string) {
@@ -56,13 +63,15 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 			ValueOverTime: make(map[string][]float64),
 			EndValues:     make(map[string]float64),
 			IRR:           make(map[string]float64),
+			Symbol:        symbol,
 		}
 
 		addSimResults(&cData, sim.NewMonthlyStrategy(startDate), "Monthly")
 		addSimResults(&cData, &sim.NoInvest{}, "NoInvest")
 
 		for i := 1; i <= 6; i++ {
-			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i), time.Month(i + 6)})
+			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
+				time.Month(i + 6)})
 			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
 
 			pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
@@ -87,8 +96,49 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		addSimResults(&cData, minDrawdown, fmt.Sprintf("DrawdownTo%.2f", minDrawdown.RelVal))
 
+		cData.StockDates, cData.StockVals, cData.StockRelVal, cData.StockMaxDD = evalSingleStockData(startDate, symbol)
+
 		t.Execute(w, &cData)
 	}
+}
+
+func evalSingleStockData(startDate time.Time, symbol string) (dates []string, timeSeries []float64, relChange []float64, maxDD []float64) {
+	curDay := startDate
+	for time.Now().Sub(curDay) > 0 {
+		price, err := av.GetPrice(symbol, curDay)
+		if err == nil {
+			price := roundTo(2, price)
+			timeSeries = append(timeSeries, price)
+			dates = append(dates, curDay.Format("2006-01-02"))
+		}
+
+		curDay = curDay.Add(time.Duration(24 * time.Hour))
+	}
+
+	lastMax := 0.0
+	// Change to first day equal to zero
+	lastPrice := timeSeries[0]
+
+	for _, price := range timeSeries {
+		if price >= lastMax {
+			maxDD = append(maxDD, 0.0)
+			lastMax = price
+		} else {
+			drawdown := roundTo(2, (price/lastMax-1.0)*100)
+			maxDD = append(maxDD, drawdown)
+		}
+
+		percChange := roundTo(2, (price/lastPrice-1.0)*100)
+		relChange = append(relChange, percChange)
+		lastPrice = price
+	}
+
+	return
+}
+
+func roundTo(digits float64, number float64) float64 {
+	factor := math.Pow(10, digits)
+	return math.Round(number*factor) / factor
 }
 
 func LaunchVisualizer() {
