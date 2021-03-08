@@ -1,6 +1,10 @@
 package sim
 
-import "time"
+import (
+	"time"
+
+	"github.com/sgasse/finca/av"
+)
 
 type Strategy interface {
 	tick(time.Time, Portfolio)
@@ -18,6 +22,12 @@ type FixedMonths struct {
 }
 
 type NoInvest struct {
+}
+
+type MinDrawdown struct {
+	LastTop   float64
+	RelVal    float64
+	RefSymbol string
 }
 
 func NewMonthlyStrategy(startDate time.Time) Strategy {
@@ -70,6 +80,28 @@ func (fm *FixedMonths) tick(date time.Time, p Portfolio) {
 }
 
 func (s *NoInvest) tick(date time.Time, p Portfolio) {
+}
+
+func (s *MinDrawdown) tick(date time.Time, p Portfolio) {
+	curVal, err := av.GetPrice(s.RefSymbol, date)
+	if err != nil {
+		return
+	}
+
+	if curVal > s.LastTop {
+		s.LastTop = curVal
+		return
+	}
+
+	if curVal/s.LastTop <= s.RelVal {
+		// Drawdown reached, rebalance
+		err := p.rebalance(p.getCashBalance(), date)
+		if err != nil {
+			return
+		}
+
+		s.LastTop = curVal
+	}
 }
 
 func investedThisMonth(date time.Time, lastInvested time.Time) bool {

@@ -55,6 +55,16 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		cData.ValueOverTime["NoInvest"] = pValues
 		cData.IRR["NoInvest"] = 0.0
 
+		minDrawdown := &sim.MinDrawdown{
+			LastTop:   0.0,
+			RelVal:    0.93,
+			RefSymbol: "SPY",
+		}
+		pValues, dates, irr = sim.SimulateStrategyOnRef(startDate, minDrawdown)
+		cData.Dates = dates
+		cData.ValueOverTime["Drawdown"] = pValues
+		cData.IRR["Drawdown"] = irr
+
 		t.Execute(w, &cData)
 	}
 }

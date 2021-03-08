@@ -101,6 +101,11 @@ func (p *multiPortfolio) rebalance(amount float64, date time.Time) error {
 		goalValue := p.goalRatios[stock] * totalGoalValue
 		goalShares := int64(math.Floor(goalValue / price))
 		newShares := goalShares - curVol
+
+		if newShares == 0 {
+			return errors.New("Not enough money to buy a complete share")
+		}
+
 		adjustedPrice := price + fixedFeePerStock/float64(newShares)
 		tr := &stockTransaction{
 			date:        date,
