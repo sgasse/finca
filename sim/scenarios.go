@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-func getRefPortfolio() Portfolio {
-	sACWI := &Stock{Symbol: "SPY"}
+func getRefPortfolio(symbol string) Portfolio {
+	sACWI := &Stock{Symbol: symbol}
 
 	stocks := map[*Stock]int64{
 		sACWI: 0,
@@ -25,8 +25,8 @@ func getRefPortfolio() Portfolio {
 	return p
 }
 
-func SimulateStrategyOnRef(startDate time.Time, strat Strategy) ([]float64, []string, float64) {
-	p := getRefPortfolio()
+func SimulateStrategyOnRef(startDate time.Time, symbol string, strat Strategy) ([]float64, []string, float64) {
+	p := getRefPortfolio(symbol)
 
 	inc := NewIncome(startDate, 1000.0)
 
