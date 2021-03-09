@@ -53,6 +53,9 @@ func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
 	}
 
 	simRes.TimeSeries[name] = pValues
+	if irr >= 400.0 {
+		irr = 0
+	}
 	simRes.IRR[name] = irr
 
 	return nil
@@ -126,10 +129,15 @@ func drawdownHandler(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 
+		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		data := struct {
 			Charts template.HTML
 		}{
-			Charts: ddTsComp,
+			Charts: concatCharts([]template.HTML{ddTsComp, irrChart}),
 		}
 
 		t, err := template.ParseFiles("templates/compare.html")
@@ -176,10 +184,15 @@ func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 
+		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		data := struct {
 			Charts template.HTML
 		}{
-			Charts: biyearlyComp,
+			Charts: concatCharts([]template.HTML{biyearlyComp, irrChart}),
 		}
 
 		t, err := template.ParseFiles("templates/compare.html")
@@ -245,6 +258,11 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 
+		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
 
 		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
@@ -265,6 +283,7 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		}{
 			Charts: concatCharts([]template.HTML{
 				tsComp,
+				irrChart,
 				pChart,
 				relChangeChart,
 				ddChart,
@@ -354,12 +373,12 @@ func xyTemplate(symbol string, dates []string, series []float64, tplFile string)
 	return templateChart(data, tplFile)
 }
 
-func multiSeriesChart(symbol string, name string, dates []string, series map[string][]float64, tplFile string) (template.HTML, error) {
+func multiSeriesChart(symbol string, name string, dates []string, series interface{}, tplFile string) (template.HTML, error) {
 	data := struct {
 		Symbol string
 		Name   string
 		Dates  []string
-		Series map[string][]float64
+		Series interface{}
 	}{
 		Symbol: symbol,
 		Name:   name,
