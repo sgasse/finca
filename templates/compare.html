@@ -4,279 +4,289 @@
 <head>
     <meta charset="utf-8">
     <title>Investment Strategy Comparison</title>
+    <style>
+        #wrapper {
+            display: flex;
+            flex-flow: row wrap;
+            justify-content: center;
+            align-items: center;
+            align-content: center;
+        }
+    </style>
     <!-- including ECharts file -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.0.2/echarts.min.js"></script>
 </head>
 
 <body>
-    <!-- prepare a DOM container with width and height -->
-    <div id="main" style="width: 900px;height:600px;"></div>
-    <script type="text/javascript">
-        var chartDom = document.getElementById('main');
-        var myChart = echarts.init(chartDom);
-        var option;
+    <div id="wrapper">
+        <!-- prepare a DOM container with width and height -->
+        <div id="main" class="chart" style="width: 900px;height:600px;"></div>
+        <script type="text/javascript">
+            var chartDom = document.getElementById('main');
+            var myChart = echarts.init(chartDom);
+            var option;
 
-        option = {
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {
-                    type: 'cross',
-                    label: {
-                        backgroundColor: '#6a7985'
+            option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'cross',
+                        label: {
+                            backgroundColor: '#6a7985'
+                        }
                     }
-                }
-            },
-            xAxis: {
-                type: 'category',
-                boundaryGap: false,
-                data: {{ .Dates }}
-            },
-            yAxis: {
-                type: 'value'
-            },
-            dataZoom: [
-                { // This dataZoom component controls x-axis by dafault
-                    type: 'slider', // this dataZoom component is dataZoom component of slider
-                    xAxisIndex: [0],
-                    start: 0, // the left is located at 0%
-                    end: 100 // the right is located at 100%
                 },
-                {
-                    type: 'slider',
-                    yAxisIndex: [0],
-                    start: 0,
-                    end: 100
-                }
-            ],
-            series: [
-                {{ range $name, $vals := .ValueOverTime }}
-                    {
-                        name: {{ $name }},
-                        data: {{ $vals }},
-                        type: 'line',
-                        areaStyle: {}
-                    },
-                {{ end }}
-            ],
-            legend: {
-                top: 'auto',
-                left: 'auto',
-                data: [{{ range $k, $v := .ValueOverTime }}{{ $k }},{{ end }}]
-            }
-        };
-
-        option && myChart.setOption(option);
-    </script>
-
-    <div id="irr" style="width: 900px;height:600px;"></div>
-    <script type="text/javascript">
-        var chartDom = document.getElementById('irr');
-        var myChart = echarts.init(chartDom);
-        var option;
-        option = {
-            title: {
-                text: 'Internal Rate of Return'
-            },
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {
-                    type: 'shadow'
-                }
-            },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '3%',
-                containLabel: true
-            },
-            xAxis: [
-                {
+                xAxis: {
                     type: 'category',
-                    data: [{{ range $k, $v := .IRR }}{{ $k }},{{ end }}],
-                    axisTick: {
-                        alignWithLabel: true
-                    }
-                }
-            ],
-            yAxis: [
-                {
+                    boundaryGap: false,
+                    data: {{ .Dates }}
+                },
+                yAxis: {
                     type: 'value'
-                }
-            ],
-            series: [
-                {
-                    name: 'Internal Rate of Return',
-                    type: 'bar',
-                    barWidth: '60%',
-                    data: [{{ range $k, $v := .IRR }}{{ $v }},{{ end }}]
-                }
-            ]
-        };
-
-        option && myChart.setOption(option);
-    </script>
-
-    <div id="singleStock" style="width: 900px;height:600px;"></div>
-    <script type="text/javascript">
-        var chartDom = document.getElementById('singleStock');
-        var myChart = echarts.init(chartDom);
-        var option;
-
-        option = {
-            title: {
-                text: 'Price of {{ .Symbol }}'
-            },
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {
-                    type: 'cross',
-                    label: {
-                        backgroundColor: '#6a7985'
-                    }
-                }
-            },
-            dataZoom: [
-                { // This dataZoom component controls x-axis by dafault
-                    type: 'slider', // this dataZoom component is dataZoom component of slider
-                    xAxisIndex: [0],
-                    start: 0, // the left is located at 0%
-                    end: 100 // the right is located at 100%
                 },
-                {
-                    type: 'slider',
-                    yAxisIndex: [0],
-                    start: 0,
-                    end: 100
-                }
-            ],
-            xAxis: {
-                type: 'category',
-                data: {{ .StockDates }}
-            },
-            yAxis: {
-                type: 'value'
-            },
-            series: [{
-                data: {{ .StockVals }},
-                type: 'line'
-            }]
-        };
-
-        option && myChart.setOption(option);
-    </script>
-
-    <div id="relChange" style="width: 900px;height:600px;"></div>
-    <script type="text/javascript">
-        var chartDom = document.getElementById('relChange');
-        var myChart = echarts.init(chartDom);
-        var option;
-
-        option = {
-            title: {
-                text: 'Relative Change of {{ .Symbol }}'
-            },
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {
-                    type: 'cross',
-                    label: {
-                        backgroundColor: '#6a7985'
+                dataZoom: [
+                    { // This dataZoom component controls x-axis by dafault
+                        type: 'slider', // this dataZoom component is dataZoom component of slider
+                        xAxisIndex: [0],
+                        start: 0, // the left is located at 0%
+                        end: 100 // the right is located at 100%
+                    },
+                    {
+                        type: 'slider',
+                        yAxisIndex: [0],
+                        start: 0,
+                        end: 100
                     }
+                ],
+                series: [
+                    {{ range $name, $vals := .ValueOverTime }}
+                        {
+                            name: {{ $name }},
+                            data: {{ $vals }},
+                            type: 'line',
+                            areaStyle: {}
+                        },
+                    {{ end }}
+                ],
+                legend: {
+                    top: 'auto',
+                    left: 'auto',
+                    data: [{{ range $k, $v := .ValueOverTime }}{{ $k }},{{ end }}]
                 }
-            },
-            dataZoom: [
-                { // This dataZoom component controls x-axis by dafault
-                    type: 'slider', // this dataZoom component is dataZoom component of slider
-                    xAxisIndex: [0],
-                    start: 0, // the left is located at 0%
-                    end: 100 // the right is located at 100%
+            };
+
+            option && myChart.setOption(option);
+        </script>
+
+        <div id="irr" class="chart" style="width: 900px;height:600px;"></div>
+        <script type="text/javascript">
+            var chartDom = document.getElementById('irr');
+            var myChart = echarts.init(chartDom);
+            var option;
+            option = {
+                title: {
+                    text: 'Internal Rate of Return'
                 },
-                {
-                    type: 'slider',
-                    yAxisIndex: [0],
-                    start: 0,
-                    end: 100
-                }
-            ],
-            visualMap: [{
-                show: false,
-                type: 'continuous',
-                seriesIndex: 0,
-                min: 0.0,
-                max: 16.0
-            }],
-            xAxis: {
-                type: 'category',
-                data: {{ .StockDates }}
-            },
-            yAxis: {
-                type: 'value'
-            },
-            series: [{
-                data: {{ .StockRelVal }},
-                type: 'line'
-            }]
-        };
-
-        option && myChart.setOption(option);
-    </script>
-
-    <div id="maxDD" style="width: 900px;height:600px;"></div>
-    <script type="text/javascript">
-        var chartDom = document.getElementById('maxDD');
-        var myChart = echarts.init(chartDom);
-        var option;
-
-        option = {
-            title: {
-                text: 'Maximum Drawdown of {{ .Symbol }}'
-            },
-            tooltip: {
-                trigger: 'axis',
-                axisPointer: {
-                    type: 'cross',
-                    label: {
-                        backgroundColor: '#6a7985'
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'shadow'
                     }
-                }
-            },
-            dataZoom: [
-                { // This dataZoom component controls x-axis by dafault
-                    type: 'slider', // this dataZoom component is dataZoom component of slider
-                    xAxisIndex: [0],
-                    start: 0, // the left is located at 0%
-                    end: 100 // the right is located at 100%
                 },
-                {
-                    type: 'slider',
-                    yAxisIndex: [0],
-                    start: 0,
-                    end: 100
-                }
-            ],
-            visualMap: [{
-                show: false,
-                type: 'continuous',
-                seriesIndex: 0,
-                min: 0.0,
-                max: -50.0 
-            }],
-            xAxis: {
-                type: 'category',
-                data: {{ .StockDates }}
-            },
-            yAxis: {
-                type: 'value'
-            },
-            series: [{
-                data: {{ .StockMaxDD }},
-                type: 'line'
-            }]
-        };
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    containLabel: true
+                },
+                xAxis: [
+                    {
+                        type: 'category',
+                        data: [{{ range $k, $v := .IRR }}{{ $k }},{{ end }}],
+                        axisTick: {
+                            alignWithLabel: true
+                        }
+                    }
+                ],
+                yAxis: [
+                    {
+                        type: 'value'
+                    }
+                ],
+                series: [
+                    {
+                        name: 'Internal Rate of Return',
+                        type: 'bar',
+                        barWidth: '60%',
+                        data: [{{ range $k, $v := .IRR }}{{ $v }},{{ end }}]
+                    }
+                ]
+            };
 
-        option && myChart.setOption(option);
-    </script>
+            option && myChart.setOption(option);
+        </script>
 
+        <div id="singleStock" class="chart" style="width: 900px;height:600px;"></div>
+        <script type="text/javascript">
+            var chartDom = document.getElementById('singleStock');
+            var myChart = echarts.init(chartDom);
+            var option;
+
+            option = {
+                title: {
+                    text: 'Price of {{ .Symbol }}'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'cross',
+                        label: {
+                            backgroundColor: '#6a7985'
+                        }
+                    }
+                },
+                dataZoom: [
+                    { // This dataZoom component controls x-axis by dafault
+                        type: 'slider', // this dataZoom component is dataZoom component of slider
+                        xAxisIndex: [0],
+                        start: 0, // the left is located at 0%
+                        end: 100 // the right is located at 100%
+                    },
+                    {
+                        type: 'slider',
+                        yAxisIndex: [0],
+                        start: 0,
+                        end: 100
+                    }
+                ],
+                xAxis: {
+                    type: 'category',
+                    data: {{ .StockDates }}
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [{
+                    data: {{ .StockVals }},
+                    type: 'line'
+                }]
+            };
+
+            option && myChart.setOption(option);
+        </script>
+
+        <div id="relChange" class="chart" style="width: 900px;height:600px;"></div>
+        <script type="text/javascript">
+            var chartDom = document.getElementById('relChange');
+            var myChart = echarts.init(chartDom);
+            var option;
+
+            option = {
+                title: {
+                    text: 'Relative Change of {{ .Symbol }}'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'cross',
+                        label: {
+                            backgroundColor: '#6a7985'
+                        }
+                    }
+                },
+                dataZoom: [
+                    { // This dataZoom component controls x-axis by dafault
+                        type: 'slider', // this dataZoom component is dataZoom component of slider
+                        xAxisIndex: [0],
+                        start: 0, // the left is located at 0%
+                        end: 100 // the right is located at 100%
+                    },
+                    {
+                        type: 'slider',
+                        yAxisIndex: [0],
+                        start: 0,
+                        end: 100
+                    }
+                ],
+                visualMap: [{
+                    show: false,
+                    type: 'continuous',
+                    seriesIndex: 0,
+                    min: 0.0,
+                    max: 16.0
+                }],
+                xAxis: {
+                    type: 'category',
+                    data: {{ .StockDates }}
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [{
+                    data: {{ .StockRelVal }},
+                    type: 'line'
+                }]
+            };
+
+            option && myChart.setOption(option);
+        </script>
+
+        <div id="maxDD" class="chart" style="width: 900px;height:600px;"></div>
+        <script type="text/javascript">
+            var chartDom = document.getElementById('maxDD');
+            var myChart = echarts.init(chartDom);
+            var option;
+
+            option = {
+                title: {
+                    text: 'Maximum Drawdown of {{ .Symbol }}'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: {
+                        type: 'cross',
+                        label: {
+                            backgroundColor: '#6a7985'
+                        }
+                    }
+                },
+                dataZoom: [
+                    { // This dataZoom component controls x-axis by dafault
+                        type: 'slider', // this dataZoom component is dataZoom component of slider
+                        xAxisIndex: [0],
+                        start: 0, // the left is located at 0%
+                        end: 100 // the right is located at 100%
+                    },
+                    {
+                        type: 'slider',
+                        yAxisIndex: [0],
+                        start: 0,
+                        end: 100
+                    }
+                ],
+                visualMap: [{
+                    show: false,
+                    type: 'continuous',
+                    seriesIndex: 0,
+                    min: 0.0,
+                    max: -50.0 
+                }],
+                xAxis: {
+                    type: 'category',
+                    data: {{ .StockDates }}
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                series: [{
+                    data: {{ .StockMaxDD }},
+                    type: 'line'
+                }]
+            };
+
+            option && myChart.setOption(option);
+        </script>
+    </div>
 </body>
 
 </html>
