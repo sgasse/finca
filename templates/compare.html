@@ -12,6 +12,11 @@
             align-items: center;
             align-content: center;
         }
+
+        .chart {
+            width: 900px;
+            height: 600px;
+        }
     </style>
     <!-- including ECharts file -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.0.2/echarts.min.js"></script>
@@ -20,9 +25,9 @@
 <body>
     <div id="wrapper">
         <!-- prepare a DOM container with width and height -->
-        <div id="main" class="chart" style="width: 900px;height:600px;"></div>
+        <div id="compArea" class="chart"></div>
         <script type="text/javascript">
-            var chartDom = document.getElementById('main');
+            var chartDom = document.getElementById('compArea');
             var myChart = echarts.init(chartDom);
             var option;
 
@@ -78,7 +83,7 @@
             option && myChart.setOption(option);
         </script>
 
-        <div id="irr" class="chart" style="width: 900px;height:600px;"></div>
+        <div id="irr" class="chart"></div>
         <script type="text/javascript">
             var chartDom = document.getElementById('irr');
             var myChart = echarts.init(chartDom);
@@ -126,7 +131,7 @@
             option && myChart.setOption(option);
         </script>
 
-        <div id="singleStock" class="chart" style="width: 900px;height:600px;"></div>
+        <div id="singleStock" class="chart"></div>
         <script type="text/javascript">
             var chartDom = document.getElementById('singleStock');
             var myChart = echarts.init(chartDom);
@@ -175,7 +180,7 @@
             option && myChart.setOption(option);
         </script>
 
-        <div id="relChange" class="chart" style="width: 900px;height:600px;"></div>
+        <div id="relChange" class="chart"></div>
         <script type="text/javascript">
             var chartDom = document.getElementById('relChange');
             var myChart = echarts.init(chartDom);
@@ -231,7 +236,7 @@
             option && myChart.setOption(option);
         </script>
 
-        <div id="maxDD" class="chart" style="width: 900px;height:600px;"></div>
+        <div id="maxDD" class="chart"></div>
         <script type="text/javascript">
             var chartDom = document.getElementById('maxDD');
             var myChart = echarts.init(chartDom);
