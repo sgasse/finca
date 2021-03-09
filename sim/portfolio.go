@@ -193,9 +193,9 @@ func buildTransactionFunc(trs []transaction, cEnd float64, date time.Time) func(
 	fn := func(x float64) float64 {
 		res := -cEnd
 		for _, tr := range trs {
-			if stockTr, ok := tr.(*stockTransaction); ok {
-				dt := date.Sub(stockTr.date).Hours() / yearHours
-				res += stockTr.price * float64(stockTr.deltaVolume) * math.Pow(x, dt)
+			if incomeTr, ok := tr.(*incomeTransaction); ok {
+				dt := date.Sub(incomeTr.date).Hours() / yearHours
+				res += incomeTr.amount * math.Pow(x, dt)
 			}
 		}
 
