@@ -34,6 +34,7 @@ func LaunchVisualizer() {
 	mux.HandleFunc("/compare", compareHandler)
 	mux.HandleFunc("/drawdown", drawdownHandler)
 	mux.HandleFunc("/biyearly", biyearlyHandler)
+	mux.HandleFunc("/showStock", showStockHandler)
 	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
 	http.ListenAndServe(":"+port, mux)
 }
@@ -87,6 +88,47 @@ func maybeUpdateSymbol(params url.Values) {
 	sDate, err := getStartDate(symbol)
 	if err == nil {
 		startDate = sDate
+	}
+}
+
+func showStockHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		params, err := url.ParseQuery(r.URL.RawQuery)
+		log.Println("Got params: ", params)
+
+		maybeUpdateSymbol(params)
+
+		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
+
+		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data := struct {
+			Charts template.HTML
+		}{
+			Charts: concatCharts([]template.HTML{
+				pChart,
+				relChangeChart,
+				ddChart,
+			}),
+		}
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		t.Execute(w, &data)
 	}
 }
 
