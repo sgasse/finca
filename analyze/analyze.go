@@ -2,14 +2,13 @@ package analyze
 
 import (
 	"bytes"
-	"fmt"
+	"errors"
 	"html/template"
 	"log"
 	"math"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/sgasse/finca/av"
@@ -21,29 +20,40 @@ var (
 	symbol    = "SPY"
 )
 
-type chartData struct {
-	Dates         []string
-	ValueOverTime map[string][]float64
-	EndValues     map[string]float64
-	IRR           map[string]float64
-	StockDates    []string
-	StockVals     []float64
-	StockRelVal   []float64
-	StockMaxDD    []float64
-	Symbol        string
-	Charts        template.HTML
+func LaunchVisualizer() {
+	port := os.Getenv("BALANCER_PORT")
+	if port == "" {
+		port = "3310"
+	}
+
+	mux := http.NewServeMux()
+
+	fs := http.FileServer(http.Dir("assets"))
+
+	mux.HandleFunc("/compare", compareHandler)
+	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
+	http.ListenAndServe(":"+port, mux)
 }
 
-func addSimResults(cData *chartData, strat sim.Strategy, name string) {
-	pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
-	cData.Dates = dates
-	cData.ValueOverTime[name] = pValues
+type SimResults struct {
+	Dates      []string
+	TimeSeries map[string][]float64
+	IRR        map[string]float64
+}
 
-	// TODO: Remove hack
-	if irr >= 400 {
-		irr = 0.0
+func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
+	pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
+	if len(simRes.Dates) == 0 {
+		simRes.Dates = dates
+	} else if len(simRes.Dates) != len(dates) {
+		return errors.New("Simulation dates do not agree")
 	}
-	cData.IRR[name] = irr
+
+	simRes.TimeSeries[name] = pValues
+	simRes.IRR[name] = irr
+
+	return nil
+
 }
 
 func getStartDate(symbol string) (sDate time.Time, err error) {
@@ -64,11 +74,6 @@ func getStartDate(symbol string) (sDate time.Time, err error) {
 
 func compareHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		t, err := template.ParseFiles("templates/compare.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
 
@@ -82,51 +87,125 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 			startDate = sDate
 		}
 
-		cData := chartData{
-			ValueOverTime: make(map[string][]float64),
-			EndValues:     make(map[string]float64),
-			IRR:           make(map[string]float64),
-			Symbol:        symbol,
+		simRes := SimResults{
+			TimeSeries: make(map[string][]float64),
+			IRR:        make(map[string]float64),
 		}
 
-		addSimResults(&cData, sim.NewMonthlyStrategy(startDate), "Monthly")
-		addSimResults(&cData, &sim.NoInvest{}, "NoInvest")
-
-		for i := 1; i <= 6; i++ {
-			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
-				time.Month(i + 6)})
-			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
-
-			pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
-			cData.Dates = dates
-			cData.ValueOverTime[name] = pValues
-			cData.IRR[name] = irr
-		}
-
-		relVal := 0.90
-		relIn, ok := params["relVal"]
-		if ok {
-			relParsed, err := strconv.ParseFloat(relIn[0], 64)
-			if err == nil {
-				relVal = relParsed
-			}
-		}
-
-		minDrawdown := &sim.MinDrawdown{
-			LastTop:   0.0,
-			RelVal:    relVal,
-			RefSymbol: "SPY",
-		}
-		addSimResults(&cData, minDrawdown, fmt.Sprintf("DrawdownTo%.2f", minDrawdown.RelVal))
-
-		cData.StockDates, cData.StockVals, cData.StockRelVal, cData.StockMaxDD = evalSingleStockData(startDate, symbol)
-		cData.Charts, err = stockCharts(symbol, cData.StockDates, cData.StockVals)
+		err = addSimResults(&simRes, sim.NewMonthlyStrategy(startDate), "Monthly")
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		t.Execute(w, &cData)
+		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
+		if err != nil {
+			log.Fatal(err)
+		}
+		delete(simRes.IRR, "NoInvest")
+
+		err = addSimResults(
+			&simRes,
+			&sim.MinDrawdown{
+				LastTop:   0.0,
+				RelVal:    0.7,
+				RefSymbol: symbol,
+			},
+			"30%Drawdown",
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = addSimResults(
+			&simRes,
+			&sim.MinDrawdown{
+				LastTop:   0.0,
+				RelVal:    0.45,
+				RefSymbol: symbol,
+			},
+			"55%Drawdown",
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		/* 		addSimResults(&cData, sim.NewMonthlyStrategy(startDate), "Monthly")
+		   		addSimResults(&cData, &sim.NoInvest{}, "NoInvest")
+
+		   		for i := 1; i <= 6; i++ {
+		   			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
+		   				time.Month(i + 6)})
+		   			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
+
+		   			pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
+		   			cData.Dates = dates
+		   			cData.ValueOverTime[name] = pValues
+		   			cData.IRR[name] = irr
+		   		}
+
+		   		relVal := 0.90
+		   		relIn, ok := params["relVal"]
+		   		if ok {
+		   			relParsed, err := strconv.ParseFloat(relIn[0], 64)
+		   			if err == nil {
+		   				relVal = relParsed
+		   			}
+		   		}
+
+		   		minDrawdown := &sim.MinDrawdown{
+		   			LastTop:   0.0,
+		   			RelVal:    relVal,
+		   			RefSymbol: "SPY",
+		   		}
+		   		addSimResults(&cData, minDrawdown, fmt.Sprintf("DrawdownTo%.2f", minDrawdown.RelVal))
+		*/
+
+		tsComp, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
+
+		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data := struct {
+			Charts template.HTML
+		}{
+			Charts: concatCharts([]template.HTML{
+				tsComp,
+				pChart,
+				relChangeChart,
+				ddChart,
+			}),
+		}
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		t.Execute(w, &data)
 	}
+}
+
+func concatCharts(charts []template.HTML) template.HTML {
+	res := template.HTML("")
+	for _, s := range charts {
+		res = res + s + "\n\n"
+	}
+	return res
 }
 
 func evalSingleStockData(startDate time.Time, symbol string) (dates []string, timeSeries []float64, relChange []float64, maxDD []float64) {
@@ -168,35 +247,10 @@ func roundTo(digits float64, number float64) float64 {
 	return math.Round(number*factor) / factor
 }
 
-func LaunchVisualizer() {
-	port := os.Getenv("BALANCER_PORT")
-	if port == "" {
-		port = "3310"
-	}
-
-	mux := http.NewServeMux()
-
-	fs := http.FileServer(http.Dir("assets"))
-
-	mux.HandleFunc("/compare", compareHandler)
-	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
-	http.ListenAndServe(":"+port, mux)
-}
-
-func stockCharts(symbol string, dates []string, timeSeries []float64) (template.HTML, error) {
-	t, err := template.ParseFiles("templates/stockprice.html")
+func templateChart(data interface{}, tplFile string) (template.HTML, error) {
+	t, err := template.ParseFiles(tplFile)
 	if err != nil {
 		return "", err
-	}
-
-	data := struct {
-		Symbol     string
-		StockDates []string
-		StockVals  []float64
-	}{
-		Symbol:     symbol,
-		StockDates: dates,
-		StockVals:  timeSeries,
 	}
 
 	var tpl bytes.Buffer
@@ -205,4 +259,32 @@ func stockCharts(symbol string, dates []string, timeSeries []float64) (template.
 	}
 
 	return template.HTML(tpl.String()), nil
+}
+
+func xyTemplate(symbol string, dates []string, series []float64, tplFile string) (template.HTML, error) {
+	data := struct {
+		Symbol string
+		Dates  []string
+		Series []float64
+	}{
+		Symbol: symbol,
+		Dates:  dates,
+		Series: series,
+	}
+	return templateChart(data, tplFile)
+}
+
+func multiSeriesChart(symbol string, name string, dates []string, series map[string][]float64, tplFile string) (template.HTML, error) {
+	data := struct {
+		Symbol string
+		Name   string
+		Dates  []string
+		Series map[string][]float64
+	}{
+		Symbol: symbol,
+		Name:   name,
+		Dates:  dates,
+		Series: series,
+	}
+	return templateChart(data, tplFile)
 }

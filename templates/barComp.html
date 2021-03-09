@@ -1,0 +1,47 @@
+<div id="bar_{{ .Name }}" class="chart"></div>
+<script type="text/javascript">
+    var chartDom = document.getElementById('bar_{{ .Name }}');
+    var myChart = echarts.init(chartDom);
+    var option;
+    option = {
+        title: {
+            text: 'Internal Rate of Return'
+        },
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+                type: 'shadow'
+            }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+        },
+        xAxis: [
+            {
+                type: 'category',
+                data: [{{ range $k, $v := .Series }}{{ $k }},{{ end }}],
+                axisTick: {
+                    alignWithLabel: true
+                }
+            }
+        ],
+        yAxis: [
+            {
+                type: 'value'
+            }
+        ],
+        series: [
+            {
+                name: 'Internal Rate of Return',
+                type: 'bar',
+                barWidth: '60%',
+                data: [{{ range $k, $v := .Series }}{{ $v }},{{ end }}]
+            }
+        ]
+    };
+
+    option && myChart.setOption(option);
+</script>
