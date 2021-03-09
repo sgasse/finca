@@ -44,6 +44,22 @@ func addSimResults(cData *chartData, strat sim.Strategy, name string) {
 	cData.IRR[name] = irr
 }
 
+func getStartDate(symbol string) (sDate time.Time, err error) {
+	earliest, _, err := av.GetDateRange(symbol)
+	if err != nil {
+		return
+	}
+
+	sDate, err = time.Parse("2006-01-02", earliest)
+	if err != nil {
+		return
+	}
+
+	// Shift to beginning of next month
+	sDate = time.Date(sDate.Year(), sDate.Month()+1, 1, 12, 0, 0, 0, time.UTC)
+	return
+}
+
 func compareHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		t, err := template.ParseFiles("templates/compare.html")
@@ -57,6 +73,11 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		inSym, ok := params["symbol"]
 		if ok {
 			symbol = inSym[0]
+		}
+
+		sDate, err := getStartDate(symbol)
+		if err == nil {
+			startDate = sDate
 		}
 
 		cData := chartData{

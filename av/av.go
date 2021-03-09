@@ -245,6 +245,23 @@ func loadCache(path string) {
 	cache.Unlock()
 }
 
+func GetDateRange(symbol string) (earliest, latest string, err error) {
+	err = maybeUpdateCacheSymbol(symbol)
+	if err != nil {
+		return
+	}
+
+	cache.RLock()
+	defer cache.RUnlock()
+	if tsResp, ok := cache.m[symbol]; ok {
+		earliest, latest = getDateRange(tsResp.TimeSeries)
+		return
+	}
+
+	err = errors.New("Symbol not found")
+	return
+}
+
 func getDateRange(ts map[string]tsDailyAdj) (earliest, latest string) {
 	earliest = time.Now().Format("2006-01-02")
 	latest = "1900-01-01"
