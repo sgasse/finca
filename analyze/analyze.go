@@ -1,6 +1,7 @@
 package analyze
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"log"
@@ -30,6 +31,7 @@ type chartData struct {
 	StockRelVal   []float64
 	StockMaxDD    []float64
 	Symbol        string
+	Charts        template.HTML
 }
 
 func addSimResults(cData *chartData, strat sim.Strategy, name string) {
@@ -118,6 +120,10 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		addSimResults(&cData, minDrawdown, fmt.Sprintf("DrawdownTo%.2f", minDrawdown.RelVal))
 
 		cData.StockDates, cData.StockVals, cData.StockRelVal, cData.StockMaxDD = evalSingleStockData(startDate, symbol)
+		cData.Charts, err = stockCharts(symbol, cData.StockDates, cData.StockVals)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		t.Execute(w, &cData)
 	}
@@ -175,4 +181,28 @@ func LaunchVisualizer() {
 	mux.HandleFunc("/compare", compareHandler)
 	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
 	http.ListenAndServe(":"+port, mux)
+}
+
+func stockCharts(symbol string, dates []string, timeSeries []float64) (template.HTML, error) {
+	t, err := template.ParseFiles("templates/stockprice.html")
+	if err != nil {
+		return "", err
+	}
+
+	data := struct {
+		Symbol     string
+		StockDates []string
+		StockVals  []float64
+	}{
+		Symbol:     symbol,
+		StockDates: dates,
+		StockVals:  timeSeries,
+	}
+
+	var tpl bytes.Buffer
+	if err := t.Execute(&tpl, data); err != nil {
+		return "", err
+	}
+
+	return template.HTML(tpl.String()), nil
 }
