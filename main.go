@@ -1,7 +1,7 @@
 package main
 
-import "github.com/sgasse/finca/viz"
+import "github.com/sgasse/finca/analyze"
 
 func main() {
-	viz.LaunchVisualizer()
+	analyze.LaunchVisualizer()
 }
