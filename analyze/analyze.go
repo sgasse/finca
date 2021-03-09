@@ -33,6 +33,7 @@ func LaunchVisualizer() {
 
 	mux.HandleFunc("/compare", compareHandler)
 	mux.HandleFunc("/drawdown", drawdownHandler)
+	mux.HandleFunc("/biyearly", biyearlyHandler)
 	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
 	http.ListenAndServe(":"+port, mux)
 }
@@ -140,6 +141,56 @@ func drawdownHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		params, err := url.ParseQuery(r.URL.RawQuery)
+		log.Println("Got params: ", params)
+
+		maybeUpdateSymbol(params)
+
+		simRes := SimResults{
+			TimeSeries: make(map[string][]float64),
+			IRR:        make(map[string]float64),
+		}
+
+		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
+		if err != nil {
+			log.Fatal(err)
+		}
+		delete(simRes.IRR, "NoInvest")
+
+		for i := 1; i <= 6; i++ {
+			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
+				time.Month(i + 6)})
+			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			err = addSimResults(&simRes, strat, name)
+
+		}
+
+		biyearlyComp, err := multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data := struct {
+			Charts template.HTML
+		}{
+			Charts: biyearlyComp,
+		}
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		t.Execute(w, &data)
+	}
+}
+
 func compareHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
@@ -188,37 +239,6 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		/* 		addSimResults(&cData, sim.NewMonthlyStrategy(startDate), "Monthly")
-		   		addSimResults(&cData, &sim.NoInvest{}, "NoInvest")
-
-		   		for i := 1; i <= 6; i++ {
-		   			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
-		   				time.Month(i + 6)})
-		   			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
-
-		   			pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
-		   			cData.Dates = dates
-		   			cData.ValueOverTime[name] = pValues
-		   			cData.IRR[name] = irr
-		   		}
-
-		   		relVal := 0.90
-		   		relIn, ok := params["relVal"]
-		   		if ok {
-		   			relParsed, err := strconv.ParseFloat(relIn[0], 64)
-		   			if err == nil {
-		   				relVal = relParsed
-		   			}
-		   		}
-
-		   		minDrawdown := &sim.MinDrawdown{
-		   			LastTop:   0.0,
-		   			RelVal:    relVal,
-		   			RefSymbol: "SPY",
-		   		}
-		   		addSimResults(&cData, minDrawdown, fmt.Sprintf("DrawdownTo%.2f", minDrawdown.RelVal))
-		*/
 
 		tsComp, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
 		if err != nil {
