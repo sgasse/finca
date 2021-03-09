@@ -3,6 +3,7 @@ package analyze
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"math"
@@ -31,6 +32,7 @@ func LaunchVisualizer() {
 	fs := http.FileServer(http.Dir("assets"))
 
 	mux.HandleFunc("/compare", compareHandler)
+	mux.HandleFunc("/drawdown", drawdownHandler)
 	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
 	http.ListenAndServe(":"+port, mux)
 }
@@ -72,20 +74,78 @@ func getStartDate(symbol string) (sDate time.Time, err error) {
 	return
 }
 
+func maybeUpdateSymbol(params url.Values) {
+	inSym, ok := params["symbol"]
+	if ok {
+		symbol = inSym[0]
+	}
+
+	sDate, err := getStartDate(symbol)
+	if err == nil {
+		startDate = sDate
+	}
+}
+
+func drawdownHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		params, err := url.ParseQuery(r.URL.RawQuery)
+		log.Println("Got params: ", params)
+
+		maybeUpdateSymbol(params)
+
+		simRes := SimResults{
+			TimeSeries: make(map[string][]float64),
+			IRR:        make(map[string]float64),
+		}
+
+		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
+		if err != nil {
+			log.Fatal(err)
+		}
+		delete(simRes.IRR, "NoInvest")
+
+		for relVal := 0.95; relVal >= 0.3; relVal -= 0.05 {
+			perc := (1.0 - relVal) * 100
+			err = addSimResults(
+				&simRes,
+				&sim.MinDrawdown{
+					LastTop:   0.0,
+					RelVal:    relVal,
+					RefSymbol: symbol,
+				},
+				fmt.Sprintf("%.0f", perc)+"%Drawdown",
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		ddTsComp, err := multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data := struct {
+			Charts template.HTML
+		}{
+			Charts: ddTsComp,
+		}
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		t.Execute(w, &data)
+	}
+}
+
 func compareHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
 
-		inSym, ok := params["symbol"]
-		if ok {
-			symbol = inSym[0]
-		}
-
-		sDate, err := getStartDate(symbol)
-		if err == nil {
-			startDate = sDate
-		}
+		maybeUpdateSymbol(params)
 
 		simRes := SimResults{
 			TimeSeries: make(map[string][]float64),
