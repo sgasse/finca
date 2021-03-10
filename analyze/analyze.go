@@ -1,7 +1,6 @@
 package analyze
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"html/template"
@@ -45,213 +44,12 @@ type SimResults struct {
 	IRR        map[string]float64
 }
 
-func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
-	pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
-	if len(simRes.Dates) == 0 {
-		simRes.Dates = dates
-	} else if len(simRes.Dates) != len(dates) {
-		return errors.New("Simulation dates do not agree")
-	}
-
-	simRes.TimeSeries[name] = pValues
-	if irr >= 400.0 {
-		irr = 0
-	}
-	simRes.IRR[name] = irr
-
-	return nil
-
-}
-
-func getStartDate(symbol string) (sDate time.Time, err error) {
-	earliest, _, err := av.GetDateRange(symbol)
-	if err != nil {
-		return
-	}
-
-	sDate, err = time.Parse("2006-01-02", earliest)
-	if err != nil {
-		return
-	}
-
-	// Shift to beginning of next month
-	sDate = time.Date(sDate.Year(), sDate.Month()+1, 1, 12, 0, 0, 0, time.UTC)
-	return
-}
-
-func maybeUpdateSymbol(params url.Values) {
-	inSym, ok := params["symbol"]
-	if ok {
-		symbol = inSym[0]
-	}
-
-	sDate, err := getStartDate(symbol)
-	if err == nil {
-		startDate = sDate
-	}
-}
-
-func showStockHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		params, err := url.ParseQuery(r.URL.RawQuery)
-		log.Println("Got params: ", params)
-
-		maybeUpdateSymbol(params)
-
-		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
-
-		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		data := struct {
-			Charts template.HTML
-		}{
-			Charts: concatCharts([]template.HTML{
-				pChart,
-				relChangeChart,
-				ddChart,
-			}),
-		}
-
-		t, err := template.ParseFiles("templates/compare.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		t.Execute(w, &data)
-	}
-}
-
-func drawdownHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		params, err := url.ParseQuery(r.URL.RawQuery)
-		log.Println("Got params: ", params)
-
-		maybeUpdateSymbol(params)
-
-		simRes := SimResults{
-			TimeSeries: make(map[string][]float64),
-			IRR:        make(map[string]float64),
-		}
-
-		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
-		if err != nil {
-			log.Fatal(err)
-		}
-		delete(simRes.IRR, "NoInvest")
-
-		for relVal := 0.95; relVal >= 0.3; relVal -= 0.05 {
-			perc := (1.0 - relVal) * 100
-			err = addSimResults(
-				&simRes,
-				&sim.MinDrawdown{
-					LastTop:   0.0,
-					RelVal:    relVal,
-					RefSymbol: symbol,
-				},
-				fmt.Sprintf("%.0f", perc)+"%Drawdown",
-			)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		ddTsComp, err := multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		data := struct {
-			Charts template.HTML
-		}{
-			Charts: concatCharts([]template.HTML{ddTsComp, irrChart}),
-		}
-
-		t, err := template.ParseFiles("templates/compare.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		t.Execute(w, &data)
-	}
-}
-
-func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		params, err := url.ParseQuery(r.URL.RawQuery)
-		log.Println("Got params: ", params)
-
-		maybeUpdateSymbol(params)
-
-		simRes := SimResults{
-			TimeSeries: make(map[string][]float64),
-			IRR:        make(map[string]float64),
-		}
-
-		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
-		if err != nil {
-			log.Fatal(err)
-		}
-		delete(simRes.IRR, "NoInvest")
-
-		for i := 1; i <= 6; i++ {
-			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
-				time.Month(i + 6)})
-			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			err = addSimResults(&simRes, strat, name)
-
-		}
-
-		biyearlyComp, err := multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		data := struct {
-			Charts template.HTML
-		}{
-			Charts: concatCharts([]template.HTML{biyearlyComp, irrChart}),
-		}
-
-		t, err := template.ParseFiles("templates/compare.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		t.Execute(w, &data)
-	}
-}
-
 func compareHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
 
-		maybeUpdateSymbol(params)
+		maybeSetSymbol(params)
 
 		simRes := SimResults{
 			TimeSeries: make(map[string][]float64),
@@ -295,30 +93,14 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 
-		tsComp, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
-		if err != nil {
-			log.Fatal(err)
-		}
+		tsComp := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
+		irrChart := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html"))
 
 		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
 
-		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
-		if err != nil {
-			log.Fatal(err)
-		}
-		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
-		if err != nil {
-			log.Fatal(err)
-		}
+		pChart := attemptTpl(xyTemplate(symbol, dates, stockTs, "templates/stockprice.html"))
+		ddChart := attemptTpl(xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html"))
+		relChangeChart := attemptTpl(xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html"))
 
 		data := struct {
 			Charts template.HTML
@@ -341,12 +123,136 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func concatCharts(charts []template.HTML) template.HTML {
-	res := template.HTML("")
-	for _, s := range charts {
-		res = res + s + "\n\n"
+func showStockHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		params, err := url.ParseQuery(r.URL.RawQuery)
+		log.Println("Got params: ", params)
+
+		maybeSetSymbol(params)
+
+		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
+
+		pChart := attemptTpl(xyTemplate(symbol, dates, stockTs, "templates/stockprice.html"))
+		ddChart := attemptTpl(xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html"))
+		relChangeChart := attemptTpl(xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html"))
+
+		data := struct {
+			Charts template.HTML
+		}{
+			Charts: concatCharts([]template.HTML{
+				pChart,
+				relChangeChart,
+				ddChart,
+			}),
+		}
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		t.Execute(w, &data)
 	}
-	return res
+}
+
+func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		params, err := url.ParseQuery(r.URL.RawQuery)
+		log.Println("Got params: ", params)
+
+		maybeSetSymbol(params)
+
+		simRes := SimResults{
+			TimeSeries: make(map[string][]float64),
+			IRR:        make(map[string]float64),
+		}
+
+		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
+		if err != nil {
+			log.Fatal(err)
+		}
+		delete(simRes.IRR, "NoInvest")
+
+		for i := 1; i <= 6; i++ {
+			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
+				time.Month(i + 6)})
+			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			err = addSimResults(&simRes, strat, name)
+
+		}
+
+		biyearlyComp := attemptTpl(multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
+		irrChart := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html"))
+
+		data := struct {
+			Charts template.HTML
+		}{
+			Charts: concatCharts([]template.HTML{biyearlyComp, irrChart}),
+		}
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		t.Execute(w, &data)
+	}
+}
+
+func drawdownHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		params, err := url.ParseQuery(r.URL.RawQuery)
+		log.Println("Got params: ", params)
+
+		maybeSetSymbol(params)
+
+		simRes := SimResults{
+			TimeSeries: make(map[string][]float64),
+			IRR:        make(map[string]float64),
+		}
+
+		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
+		if err != nil {
+			log.Fatal(err)
+		}
+		delete(simRes.IRR, "NoInvest")
+
+		for relVal := 0.95; relVal >= 0.3; relVal -= 0.05 {
+			perc := (1.0 - relVal) * 100
+			err = addSimResults(
+				&simRes,
+				&sim.MinDrawdown{
+					LastTop:   0.0,
+					RelVal:    relVal,
+					RefSymbol: symbol,
+				},
+				fmt.Sprintf("%.0f", perc)+"%Drawdown",
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		ddTsComp := attemptTpl(multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
+		irrChart := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html"))
+
+		data := struct {
+			Charts template.HTML
+		}{
+			Charts: concatCharts([]template.HTML{ddTsComp, irrChart}),
+		}
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		t.Execute(w, &data)
+	}
 }
 
 func evalSingleStockData(startDate time.Time, symbol string) (dates []string, timeSeries []float64, relChange []float64, maxDD []float64) {
@@ -383,49 +289,60 @@ func evalSingleStockData(startDate time.Time, symbol string) (dates []string, ti
 	return
 }
 
+func getStartDate(symbol string) (sDate time.Time, err error) {
+	earliest, _, err := av.GetDateRange(symbol)
+	if err != nil {
+		return
+	}
+
+	sDate, err = time.Parse("2006-01-02", earliest)
+	if err != nil {
+		return
+	}
+
+	// Shift to beginning of next month
+	sDate = time.Date(sDate.Year(), sDate.Month()+1, 1, 12, 0, 0, 0, time.UTC)
+	return
+}
+
+func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
+	pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
+	if len(simRes.Dates) == 0 {
+		simRes.Dates = dates
+	} else if len(simRes.Dates) != len(dates) {
+		return errors.New("Simulation dates do not agree")
+	}
+
+	simRes.TimeSeries[name] = pValues
+	if irr >= 400.0 {
+		irr = 0
+	}
+	simRes.IRR[name] = irr
+
+	return nil
+
+}
+
+func maybeSetSymbol(params url.Values) {
+	inSym, ok := params["symbol"]
+	if ok {
+		symbol = inSym[0]
+	}
+
+	sDate, err := getStartDate(symbol)
+	if err == nil {
+		startDate = sDate
+	}
+}
+
+func attemptTpl(tpl template.HTML, err error) template.HTML {
+	if err != nil {
+		log.Fatal(err)
+	}
+	return tpl
+}
+
 func roundTo(digits float64, number float64) float64 {
 	factor := math.Pow(10, digits)
 	return math.Round(number*factor) / factor
-}
-
-func templateChart(data interface{}, tplFile string) (template.HTML, error) {
-	t, err := template.ParseFiles(tplFile)
-	if err != nil {
-		return "", err
-	}
-
-	var tpl bytes.Buffer
-	if err := t.Execute(&tpl, data); err != nil {
-		return "", err
-	}
-
-	return template.HTML(tpl.String()), nil
-}
-
-func xyTemplate(symbol string, dates []string, series []float64, tplFile string) (template.HTML, error) {
-	data := struct {
-		Symbol string
-		Dates  []string
-		Series []float64
-	}{
-		Symbol: symbol,
-		Dates:  dates,
-		Series: series,
-	}
-	return templateChart(data, tplFile)
-}
-
-func multiSeriesChart(symbol string, name string, dates []string, series interface{}, tplFile string) (template.HTML, error) {
-	data := struct {
-		Symbol string
-		Name   string
-		Dates  []string
-		Series interface{}
-	}{
-		Symbol: symbol,
-		Name:   name,
-		Dates:  dates,
-		Series: series,
-	}
-	return templateChart(data, tplFile)
 }

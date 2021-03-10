@@ -12,6 +12,15 @@ import (
 
 var fixedFeePerStock = 56.0
 
+type Portfolio interface {
+	SetStart(time.Time)
+	TotalValue(time.Time) float64
+	CalcIRR(time.Time) float64
+	getCashBalance() float64
+	transact(transaction)
+	rebalance(float64, time.Time) error
+}
+
 type Stock struct {
 	Symbol string
 	WKN    string
@@ -32,15 +41,6 @@ type stockTransaction struct {
 	stock       *Stock
 	deltaVolume int64
 	price       float64
-}
-
-type Portfolio interface {
-	SetStart(time.Time)
-	rebalance(float64, time.Time) error
-	getCashBalance() float64
-	transact(transaction)
-	TotalValue(time.Time) float64
-	CalcIRR(time.Time) float64
 }
 
 type multiPortfolio struct {
@@ -74,16 +74,42 @@ func NewMultiPortfolio(cash float64, stocks map[*Stock]int64, goalRatios map[*St
 	return &multiPortfolio{cash: cash, stocks: stocks, goalRatios: goalRatios}, nil
 }
 
-func (t *stockTransaction) delta() float64 {
-	return -float64(t.deltaVolume) * t.price
-}
-
-func (t *incomeTransaction) delta() float64 {
-	return t.amount
-}
-
 func (p *multiPortfolio) SetStart(date time.Time) {
 	p.startDate = date
+}
+
+func (p *multiPortfolio) TotalValue(date time.Time) float64 {
+	totalStockValue, err := getTotalStockValue(p.stocks, date)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	totalValue := p.cash + totalStockValue
+
+	return totalValue
+}
+
+func (p *multiPortfolio) CalcIRR(date time.Time) float64 {
+	totalValue := p.TotalValue(date)
+	fx := buildTransactionFunc(p.transactions, totalValue, date)
+	irr := bisect(fx, 5.0, 1.0, 1e-3, 100)
+	// Transform to percent
+	irr = (irr - 1.0) * 100
+	// Round to two digits after the comma
+	irr = math.Round(irr*100) / 100
+	return irr
+}
+
+func (p *multiPortfolio) getCashBalance() float64 {
+	return p.cash
+}
+
+func (p *multiPortfolio) transact(tr transaction) {
+	p.transactions = append(p.transactions, tr)
+	p.cash = p.cash + tr.delta()
+	if st, ok := tr.(*stockTransaction); ok {
+		p.stocks[st.stock] += st.deltaVolume
+	}
 }
 
 func (p *multiPortfolio) rebalance(amount float64, date time.Time) error {
@@ -119,27 +145,12 @@ func (p *multiPortfolio) rebalance(amount float64, date time.Time) error {
 	return nil
 }
 
-func (p *multiPortfolio) getCashBalance() float64 {
-	return p.cash
+func (t *incomeTransaction) delta() float64 {
+	return t.amount
 }
 
-func (p *multiPortfolio) transact(tr transaction) {
-	p.transactions = append(p.transactions, tr)
-	p.cash = p.cash + tr.delta()
-	if st, ok := tr.(*stockTransaction); ok {
-		p.stocks[st.stock] += st.deltaVolume
-	}
-}
-
-func (p *multiPortfolio) TotalValue(date time.Time) float64 {
-	totalStockValue, err := getTotalStockValue(p.stocks, date)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	totalValue := p.cash + totalStockValue
-
-	return totalValue
+func (t *stockTransaction) delta() float64 {
+	return -float64(t.deltaVolume) * t.price
 }
 
 func getTotalStockValue(stocks map[*Stock]int64, date time.Time) (float64, error) {
@@ -152,17 +163,6 @@ func getTotalStockValue(stocks map[*Stock]int64, date time.Time) (float64, error
 		totalStockValue += float64(vol) * price
 	}
 	return totalStockValue, nil
-}
-
-func (p *multiPortfolio) CalcIRR(date time.Time) float64 {
-	totalValue := p.TotalValue(date)
-	fx := buildTransactionFunc(p.transactions, totalValue, date)
-	irr := bisect(fx, 5.0, 1.0, 1e-3, 100)
-	// Transform to percent
-	irr = (irr - 1.0) * 100
-	// Round to two digits after the comma
-	irr = math.Round(irr*100) / 100
-	return irr
 }
 
 func bisect(fn func(float64) float64, high float64, low float64, prec float64, maxIter int) float64 {
