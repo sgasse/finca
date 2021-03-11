@@ -30,10 +30,10 @@ func LaunchVisualizer() {
 
 	fs := http.FileServer(http.Dir("assets"))
 
-	mux.HandleFunc("/compare", compareHandler)
-	mux.HandleFunc("/drawdown", drawdownHandler)
-	mux.HandleFunc("/biyearly", biyearlyHandler)
-	mux.HandleFunc("/showStock", showStockHandler)
+	mux.Handle("/compare", chartHandler(compareStrats))
+	mux.Handle("/showStock", chartHandler(showStock))
+	mux.Handle("/biyearly", chartHandler(biyearly))
+	mux.Handle("/drawdown", chartHandler(drawdown))
 	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
 	http.ListenAndServe(":"+port, mux)
 }
@@ -44,7 +44,15 @@ type SimResults struct {
 	IRR        map[string]float64
 }
 
-func compareHandler(w http.ResponseWriter, r *http.Request) {
+type chartHandler func(http.ResponseWriter, *http.Request) error
+
+func (fn chartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := fn(w, r); err != nil {
+		http.Error(w, err.Error(), 500)
+	}
+}
+
+func compareStrats(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
@@ -56,18 +64,16 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 			IRR:        make(map[string]float64),
 		}
 
-		err = addSimResults(&simRes, sim.NewMonthlyStrategy(startDate), "Monthly")
-		if err != nil {
-			log.Fatal(err)
+		if err = addSimResults(&simRes, sim.NewMonthlyStrategy(startDate), "Monthly"); err != nil {
+			return err
 		}
 
-		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
-		if err != nil {
-			log.Fatal(err)
+		if err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
+			return err
 		}
 		delete(simRes.IRR, "NoInvest")
 
-		err = addSimResults(
+		if err = addSimResults(
 			&simRes,
 			&sim.MinDrawdown{
 				LastTop:   0.0,
@@ -75,12 +81,11 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 				RefSymbol: symbol,
 			},
 			"30%Drawdown",
-		)
-		if err != nil {
-			log.Fatal(err)
+		); err != nil {
+			return err
 		}
 
-		err = addSimResults(
+		if err = addSimResults(
 			&simRes,
 			&sim.MinDrawdown{
 				LastTop:   0.0,
@@ -88,9 +93,8 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 				RefSymbol: symbol,
 			},
 			"55%Drawdown",
-		)
-		if err != nil {
-			log.Fatal(err)
+		); err != nil {
+			return err
 		}
 
 		tsComp := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
@@ -116,14 +120,15 @@ func compareHandler(w http.ResponseWriter, r *http.Request) {
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		t.Execute(w, &data)
 	}
+	return nil
 }
 
-func showStockHandler(w http.ResponseWriter, r *http.Request) {
+func showStock(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
@@ -148,14 +153,15 @@ func showStockHandler(w http.ResponseWriter, r *http.Request) {
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		t.Execute(w, &data)
 	}
+	return nil
 }
 
-func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
+func biyearly(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
@@ -167,9 +173,8 @@ func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
 			IRR:        make(map[string]float64),
 		}
 
-		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
-		if err != nil {
-			log.Fatal(err)
+		if err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
+			return err
 		}
 		delete(simRes.IRR, "NoInvest")
 
@@ -177,12 +182,10 @@ func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
 			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
 				time.Month(i + 6)})
 			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
-			if err != nil {
-				log.Fatal(err)
+
+			if err = addSimResults(&simRes, strat, name); err != nil {
+				return err
 			}
-
-			err = addSimResults(&simRes, strat, name)
-
 		}
 
 		biyearlyComp := attemptTpl(multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
@@ -196,14 +199,15 @@ func biyearlyHandler(w http.ResponseWriter, r *http.Request) {
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		t.Execute(w, &data)
 	}
+	return nil
 }
 
-func drawdownHandler(w http.ResponseWriter, r *http.Request) {
+func drawdown(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
@@ -215,9 +219,8 @@ func drawdownHandler(w http.ResponseWriter, r *http.Request) {
 			IRR:        make(map[string]float64),
 		}
 
-		err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest")
-		if err != nil {
-			log.Fatal(err)
+		if err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
+			return err
 		}
 		delete(simRes.IRR, "NoInvest")
 
@@ -248,11 +251,12 @@ func drawdownHandler(w http.ResponseWriter, r *http.Request) {
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		t.Execute(w, &data)
 	}
+	return nil
 }
 
 func evalSingleStockData(startDate time.Time, symbol string) (dates []string, timeSeries []float64, relChange []float64, maxDD []float64) {
