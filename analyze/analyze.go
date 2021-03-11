@@ -58,13 +58,7 @@ func (fn chartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func compareStrats(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		params, err := url.ParseQuery(r.URL.RawQuery)
-		if err != nil {
-			return err
-		}
-		log.Println("Got params: ", params)
-
-		err = maybeSetSymbol(params)
+		err := maybeSetSymbol(r)
 		if err != nil {
 			return err
 		}
@@ -145,10 +139,7 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 
 func showStock(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		params, err := url.ParseQuery(r.URL.RawQuery)
-		log.Println("Got params: ", params)
-
-		err = maybeSetSymbol(params)
+		err := maybeSetSymbol(r)
 		if err != nil {
 			return err
 		}
@@ -182,13 +173,7 @@ func showStock(w http.ResponseWriter, r *http.Request) error {
 
 func biyearly(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		params, err := url.ParseQuery(r.URL.RawQuery)
-		if err != nil {
-			return err
-		}
-		log.Println("Got params: ", params)
-
-		err = maybeSetSymbol(params)
+		err := maybeSetSymbol(r)
 		if err != nil {
 			return err
 		}
@@ -234,13 +219,7 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 
 func drawdown(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		params, err := url.ParseQuery(r.URL.RawQuery)
-		if err != nil {
-			return err
-		}
-		log.Println("Got params: ", params)
-
-		err = maybeSetSymbol(params)
+		err := maybeSetSymbol(r)
 		if err != nil {
 			return err
 		}
@@ -358,7 +337,13 @@ func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
 
 }
 
-func maybeSetSymbol(params url.Values) error {
+func maybeSetSymbol(r *http.Request) error {
+	params, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		return err
+	}
+	log.Println("Got params: ", params)
+
 	prevSymbol := symbol
 	inSym, ok := params["symbol"]
 	if ok {
