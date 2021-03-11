@@ -44,6 +44,10 @@ type SimResults struct {
 	IRR        map[string]float64
 }
 
+type chartData struct {
+	Charts template.HTML
+}
+
 type chartHandler func(http.ResponseWriter, *http.Request) error
 
 func (fn chartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -55,9 +59,15 @@ func (fn chartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func compareStrats(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			return err
+		}
 		log.Println("Got params: ", params)
 
-		maybeSetSymbol(params)
+		err = maybeSetSymbol(params)
+		if err != nil {
+			return err
+		}
 
 		simRes := SimResults{
 			TimeSeries: make(map[string][]float64),
@@ -97,26 +107,31 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		tsComp := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
-		irrChart := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html"))
+		tsComp, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
+		if err != nil {
+			return err
+		}
+		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
+		if err != nil {
+			return err
+		}
 
 		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
 
-		pChart := attemptTpl(xyTemplate(symbol, dates, stockTs, "templates/stockprice.html"))
-		ddChart := attemptTpl(xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html"))
-		relChangeChart := attemptTpl(xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html"))
-
-		data := struct {
-			Charts template.HTML
-		}{
-			Charts: concatCharts([]template.HTML{
-				tsComp,
-				irrChart,
-				pChart,
-				relChangeChart,
-				ddChart,
-			}),
+		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
+		if err != nil {
+			return err
 		}
+		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
+		if err != nil {
+			return err
+		}
+		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
+		if err != nil {
+			return err
+		}
+
+		data := chartData{concatCharts([]template.HTML{tsComp, irrChart, pChart, relChangeChart, ddChart})}
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
@@ -133,23 +148,27 @@ func showStock(w http.ResponseWriter, r *http.Request) error {
 		params, err := url.ParseQuery(r.URL.RawQuery)
 		log.Println("Got params: ", params)
 
-		maybeSetSymbol(params)
+		err = maybeSetSymbol(params)
+		if err != nil {
+			return err
+		}
 
 		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
 
-		pChart := attemptTpl(xyTemplate(symbol, dates, stockTs, "templates/stockprice.html"))
-		ddChart := attemptTpl(xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html"))
-		relChangeChart := attemptTpl(xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html"))
-
-		data := struct {
-			Charts template.HTML
-		}{
-			Charts: concatCharts([]template.HTML{
-				pChart,
-				relChangeChart,
-				ddChart,
-			}),
+		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
+		if err != nil {
+			return err
 		}
+		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
+		if err != nil {
+			return err
+		}
+		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
+		if err != nil {
+			return err
+		}
+
+		data := chartData{concatCharts([]template.HTML{pChart, relChangeChart, ddChart})}
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
@@ -164,9 +183,15 @@ func showStock(w http.ResponseWriter, r *http.Request) error {
 func biyearly(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			return err
+		}
 		log.Println("Got params: ", params)
 
-		maybeSetSymbol(params)
+		err = maybeSetSymbol(params)
+		if err != nil {
+			return err
+		}
 
 		simRes := SimResults{
 			TimeSeries: make(map[string][]float64),
@@ -188,13 +213,13 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		biyearlyComp := attemptTpl(multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
-		irrChart := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html"))
-
-		data := struct {
-			Charts template.HTML
-		}{
-			Charts: concatCharts([]template.HTML{biyearlyComp, irrChart}),
+		biyearlyComp, err := multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
+		if err != nil {
+			return err
+		}
+		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
+		if err != nil {
+			return err
 		}
 
 		t, err := template.ParseFiles("templates/compare.html")
@@ -202,7 +227,7 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		t.Execute(w, &data)
+		t.Execute(w, &chartData{concatCharts([]template.HTML{biyearlyComp, irrChart})})
 	}
 	return nil
 }
@@ -210,9 +235,15 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 func drawdown(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
 		params, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			return err
+		}
 		log.Println("Got params: ", params)
 
-		maybeSetSymbol(params)
+		err = maybeSetSymbol(params)
+		if err != nil {
+			return err
+		}
 
 		simRes := SimResults{
 			TimeSeries: make(map[string][]float64),
@@ -240,13 +271,13 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		ddTsComp := attemptTpl(multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html"))
-		irrChart := attemptTpl(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html"))
-
-		data := struct {
-			Charts template.HTML
-		}{
-			Charts: concatCharts([]template.HTML{ddTsComp, irrChart}),
+		ddTsComp, err := multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
+		if err != nil {
+			return err
+		}
+		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
+		if err != nil {
+			return err
 		}
 
 		t, err := template.ParseFiles("templates/compare.html")
@@ -254,7 +285,7 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		t.Execute(w, &data)
+		t.Execute(w, &chartData{concatCharts([]template.HTML{ddTsComp, irrChart})})
 	}
 	return nil
 }
@@ -327,23 +358,21 @@ func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
 
 }
 
-func maybeSetSymbol(params url.Values) {
+func maybeSetSymbol(params url.Values) error {
+	prevSymbol := symbol
 	inSym, ok := params["symbol"]
 	if ok {
 		symbol = inSym[0]
 	}
 
 	sDate, err := getStartDate(symbol)
-	if err == nil {
-		startDate = sDate
-	}
-}
-
-func attemptTpl(tpl template.HTML, err error) template.HTML {
 	if err != nil {
-		log.Fatal(err)
+		symbol = prevSymbol
+		return err
 	}
-	return tpl
+
+	startDate = sDate
+	return nil
 }
 
 func roundTo(digits float64, number float64) float64 {

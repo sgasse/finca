@@ -171,6 +171,13 @@ func getTsDailyAdj(symbol string, client qClient) (resp tsDailyAdjResp, err erro
 	}
 
 	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		return
+	}
+
+	if resp.TimeSeries == nil {
+		err = errors.New(fmt.Sprint("No data for symbol ", symbol, " found"))
+	}
 	return
 }
 
@@ -237,7 +244,11 @@ func loadCache(path string) {
 	} else {
 		log.Println("Cache loaded, symbols:")
 		for k, tsData := range cache.m {
-			earliest, latest := getDateRange(tsData.TimeSeries)
+			earliest, latest, err := getDateRange(tsData.TimeSeries)
+			if err != nil {
+				log.Println(err)
+				return
+			}
 			log.Println(k, ": ", len(tsData.TimeSeries), " entries, ", earliest, "-", latest)
 		}
 	}
@@ -254,7 +265,7 @@ func GetDateRange(symbol string) (earliest, latest string, err error) {
 	cache.RLock()
 	defer cache.RUnlock()
 	if tsResp, ok := cache.m[symbol]; ok {
-		earliest, latest = getDateRange(tsResp.TimeSeries)
+		earliest, latest, err = getDateRange(tsResp.TimeSeries)
 		return
 	}
 
@@ -262,7 +273,7 @@ func GetDateRange(symbol string) (earliest, latest string, err error) {
 	return
 }
 
-func getDateRange(ts map[string]tsDailyAdj) (earliest, latest string) {
+func getDateRange(ts map[string]tsDailyAdj) (earliest, latest string, err error) {
 	earliest = time.Now().Format("2006-01-02")
 	latest = "1900-01-01"
 
@@ -273,6 +284,10 @@ func getDateRange(ts map[string]tsDailyAdj) (earliest, latest string) {
 		if k > latest {
 			latest = k
 		}
+	}
+
+	if earliest == time.Now().Format("2006-01-02") || latest == "1900-01-01" {
+		err = errors.New("Date range could not be determined")
 	}
 	return
 }
