@@ -68,7 +68,7 @@ func getStartDate(symbol string) (sDate time.Time, err error) {
 	return
 }
 
-func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
+func addSimResult(simRes *SimResults, strat sim.Strategy, name string) error {
 	pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
 	if len(simRes.Dates) == 0 {
 		simRes.Dates = dates
@@ -84,6 +84,22 @@ func addSimResults(simRes *SimResults, strat sim.Strategy, name string) error {
 
 	return nil
 
+}
+
+func addSimResults(simRes *SimResults, strats map[string]sim.Strategy) error {
+	for name, strat := range strats {
+		if err := addSimResult(simRes, strat, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newSimRes() SimResults {
+	return SimResults{
+		TimeSeries: make(map[string][]float64),
+		IRR:        make(map[string]float64),
+	}
 }
 
 func maybeSetSymbol(r *http.Request) error {

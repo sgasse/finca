@@ -55,41 +55,16 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		simRes := SimResults{
-			TimeSeries: make(map[string][]float64),
-			IRR:        make(map[string]float64),
+		simRes := newSimRes()
+
+		strats := map[string]sim.Strategy{
+			"Monthly":     sim.NewMonthlyStrategy(startDate),
+			"NoInvest":    &sim.NoInvest{},
+			"30%Drawdown": &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.7, RefSymbol: symbol},
+			"55%Drawdown": &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.45, RefSymbol: symbol},
 		}
 
-		if err = addSimResults(&simRes, sim.NewMonthlyStrategy(startDate), "Monthly"); err != nil {
-			return err
-		}
-
-		if err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
-			return err
-		}
-		delete(simRes.IRR, "NoInvest")
-
-		if err = addSimResults(
-			&simRes,
-			&sim.MinDrawdown{
-				LastTop:   0.0,
-				RelVal:    0.7,
-				RefSymbol: symbol,
-			},
-			"30%Drawdown",
-		); err != nil {
-			return err
-		}
-
-		if err = addSimResults(
-			&simRes,
-			&sim.MinDrawdown{
-				LastTop:   0.0,
-				RelVal:    0.45,
-				RefSymbol: symbol,
-			},
-			"55%Drawdown",
-		); err != nil {
+		if err = addSimResults(&simRes, strats); err != nil {
 			return err
 		}
 
@@ -170,22 +145,18 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		simRes := SimResults{
-			TimeSeries: make(map[string][]float64),
-			IRR:        make(map[string]float64),
-		}
+		simRes := newSimRes()
 
-		if err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
+		if err = addSimResult(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
 			return err
 		}
-		delete(simRes.IRR, "NoInvest")
 
 		for i := 1; i <= 6; i++ {
 			strat := sim.NewFixedMonthsStrategy(startDate, []time.Month{time.Month(i),
 				time.Month(i + 6)})
 			name := fmt.Sprint(time.Month(i), "/", time.Month(i+6))
 
-			if err = addSimResults(&simRes, strat, name); err != nil {
+			if err = addSimResult(&simRes, strat, name); err != nil {
 				return err
 			}
 		}
@@ -216,19 +187,15 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		simRes := SimResults{
-			TimeSeries: make(map[string][]float64),
-			IRR:        make(map[string]float64),
-		}
+		simRes := newSimRes()
 
-		if err = addSimResults(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
+		if err = addSimResult(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
 			return err
 		}
-		delete(simRes.IRR, "NoInvest")
 
 		for relVal := 0.95; relVal >= 0.3; relVal -= 0.05 {
 			perc := (1.0 - relVal) * 100
-			err = addSimResults(
+			err = addSimResult(
 				&simRes,
 				&sim.MinDrawdown{
 					LastTop:   0.0,
