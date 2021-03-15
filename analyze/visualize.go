@@ -58,10 +58,12 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 		simRes := newSimRes()
 
 		strats := map[string]sim.Strategy{
-			"Monthly":     sim.NewMonthlyStrategy(startDate),
-			"NoInvest":    &sim.NoInvest{},
-			"30%Drawdown": &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.7, RefSymbol: symbol},
-			"55%Drawdown": &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.45, RefSymbol: symbol},
+			"Monthly":       sim.NewMonthlyStrategy(startDate),
+			"NoInvest":      &sim.NoInvest{},
+			"January/July":  sim.NewFixedMonthsStrategy(startDate, []time.Month{1, 6}),
+			"April/October": sim.NewFixedMonthsStrategy(startDate, []time.Month{4, 10}),
+			"30%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.7, RefSymbol: symbol},
+			"55%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.45, RefSymbol: symbol},
 		}
 
 		if err = addSimResults(&simRes, strats); err != nil {
