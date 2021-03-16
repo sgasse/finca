@@ -70,38 +70,24 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		tsComp, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
-		if err != nil {
-			return err
-		}
-		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
-		if err != nil {
-			return err
-		}
-
 		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
 
-		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
-		if err != nil {
-			return err
-		}
-		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
-		if err != nil {
-			return err
-		}
-		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
-		if err != nil {
-			return err
-		}
-
-		data := chartData{concatCharts([]template.HTML{tsComp, irrChart, pChart, relChangeChart, ddChart})}
+		chData, err := combineCharts(
+			[]chartRes{
+				wrapCR(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")),
+				wrapCR(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
+				wrapCR(xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")),
+				wrapCR(xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")),
+				wrapCR(xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")),
+			},
+		)
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
 			return err
 		}
 
-		t.Execute(w, &data)
+		t.Execute(w, &chData)
 	}
 	return nil
 }
@@ -115,27 +101,20 @@ func showStock(w http.ResponseWriter, r *http.Request) error {
 
 		dates, stockTs, stockRelChange, stockDrawdown := evalSingleStockData(startDate, symbol)
 
-		pChart, err := xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")
-		if err != nil {
-			return err
-		}
-		ddChart, err := xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")
-		if err != nil {
-			return err
-		}
-		relChangeChart, err := xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")
-		if err != nil {
-			return err
-		}
-
-		data := chartData{concatCharts([]template.HTML{pChart, relChangeChart, ddChart})}
+		chData, err := combineCharts(
+			[]chartRes{
+				wrapCR(xyTemplate(symbol, dates, stockTs, "templates/stockprice.html")),
+				wrapCR(xyTemplate(symbol, dates, stockDrawdown, "templates/drawdown.html")),
+				wrapCR(xyTemplate(symbol, dates, stockRelChange, "templates/relChange.html")),
+			},
+		)
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
 			return err
 		}
 
-		t.Execute(w, &data)
+		t.Execute(w, &chData)
 	}
 	return nil
 }
@@ -163,21 +142,19 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		biyearlyComp, err := multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
-		if err != nil {
-			return err
-		}
-		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
-		if err != nil {
-			return err
-		}
+		chData, err := combineCharts(
+			[]chartRes{
+				wrapCR(multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")),
+				wrapCR(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
+			},
+		)
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
 			return err
 		}
 
-		t.Execute(w, &chartData{concatCharts([]template.HTML{biyearlyComp, irrChart})})
+		t.Execute(w, &chData)
 	}
 	return nil
 }
@@ -211,21 +188,19 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		ddTsComp, err := multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")
-		if err != nil {
-			return err
-		}
-		irrChart, err := multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")
-		if err != nil {
-			return err
-		}
+		chData, err := combineCharts(
+			[]chartRes{
+				wrapCR(multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")),
+				wrapCR(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
+			},
+		)
 
 		t, err := template.ParseFiles("templates/compare.html")
 		if err != nil {
 			return err
 		}
 
-		t.Execute(w, &chartData{concatCharts([]template.HTML{ddTsComp, irrChart})})
+		t.Execute(w, &chData)
 	}
 	return nil
 }
