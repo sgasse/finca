@@ -39,7 +39,7 @@ func NewMonthlyStrategy(startDate time.Time) Strategy {
 
 func (mm *MidMonth) tick(date time.Time, p Portfolio) {
 	if !investedThisMonth(date, mm.lastInvested) {
-		if date.Day() > mm.minDay {
+		if date.Day() >= mm.minDay {
 			// Attempt invest
 			err := p.rebalance(p.getCashBalance(), date)
 			if err != nil {
@@ -58,7 +58,8 @@ func NewFixedMonthsStrategy(startDate time.Time, months []time.Month) Strategy {
 	}
 	return &FixedMonths{
 		investMonths: invMonths,
-		lastInvested: startDate.Add(-365 * 24 * time.Hour),
+		// Go 31 days back
+		lastInvested: startDate.Add(-31 * 24 * time.Hour),
 		minDay:       14,
 	}
 }
@@ -105,7 +106,8 @@ func (s *MinDrawdown) tick(date time.Time, p Portfolio) {
 }
 
 func investedThisMonth(date time.Time, lastInvested time.Time) bool {
-	if lastInvested.Month() == date.Month() {
+	if lastInvested.Year() == date.Year() &&
+		lastInvested.Month() == date.Month() {
 		return true
 	}
 	return false

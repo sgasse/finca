@@ -52,14 +52,6 @@ type tsDailyAdjResp struct {
 	LastQueried time.Time             `json:"lastQueried"`
 }
 
-func init() {
-	avAPIKey := os.Getenv("AV_API_KEY")
-	if avAPIKey == "" {
-		log.Fatal("You must specify your API key from AlphaVantage as AV_API_KEY.")
-	}
-	LaunchAV(avAPIKey)
-}
-
 func GetDividend(symbol string, date time.Time) (float64, error) {
 	// Ensure latest data is available
 	err := maybeUpdateCacheSymbol(symbol)
