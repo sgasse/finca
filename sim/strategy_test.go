@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -46,6 +47,15 @@ func (m *mockPortfolio) rebalance(reinvest float64, date time.Time) error {
 	return args.Error(0)
 }
 
+type mockPriceProvider struct {
+	mock.Mock
+}
+
+func (m *mockPriceProvider) GetPrice(symbol string, date time.Time) (float64, error) {
+	args := m.Called(symbol, date)
+	return args.Get(0).(float64), args.Error(1)
+}
+
 func TestNewMonthlyStrategy(t *testing.T) {
 	startDate := time.Date(2020, 06, 03, 23, 55, 1, 0, time.UTC)
 	strat := NewMonthlyStrategy(startDate)
@@ -71,13 +81,6 @@ func TestNewFixedMonthsStrategy(t *testing.T) {
 		assert.Contains(t, fixedStrat.investMonths, time.Month(9),
 			"Month September missing")
 	}
-}
-
-func newMockP(callDate time.Time) *mockPortfolio {
-	p := &mockPortfolio{}
-	p.On("getCashBalance").Return(2000.0)
-	p.On("rebalance", 2000.0, callDate).Return(nil)
-	return p
 }
 
 func TestMidMonthTick(t *testing.T) {
@@ -124,6 +127,21 @@ func TestMidMonthTick(t *testing.T) {
 	strat.tick(simDay, p)
 	p.AssertNotCalled(t, "getCashBalance")
 	p.AssertNotCalled(t, "rebalance", 2000.0, simDay)
+
+	// Test error on rebalance
+	startDate = time.Date(2020, 1, 1, 1, 1, 1, 0, time.UTC)
+	strat = NewMonthlyStrategy(startDate)
+	tmpLastInv := strat.(*MidMonth).lastInvested
+
+	date := time.Date(2020, 1, 14, 1, 1, 1, 0, time.UTC)
+
+	p = &mockPortfolio{}
+	p.On("getCashBalance").Return(2000.0)
+	p.On("rebalance", 2000.0, date).Return(errors.New("Test error"))
+	strat.tick(date, p)
+	p.AssertExpectations(t)
+	assert.Equal(t, tmpLastInv, strat.(*MidMonth).lastInvested,
+		"lastInvested should remain unchanged.")
 }
 
 func TestFixedMonthsTick(t *testing.T) {
@@ -208,6 +226,22 @@ func TestFixedMonthsTick(t *testing.T) {
 			p.AssertNotCalled(t, "rebalance", 2000.0, td.date)
 		}
 	}
+
+	// Test error on rebalance
+	startDate = time.Date(2020, 1, 1, 1, 1, 1, 0, time.UTC)
+	strat = NewFixedMonthsStrategy(startDate, []time.Month{1, 4, 10})
+	tmpLastInv := strat.(*FixedMonths).lastInvested
+
+	date := time.Date(2020, 1, 14, 1, 1, 1, 0, time.UTC)
+
+	p := &mockPortfolio{}
+	p.On("getCashBalance").Return(2000.0)
+	p.On("rebalance", 2000.0, date).Return(errors.New("Test error"))
+	strat.tick(date, p)
+	p.AssertExpectations(t)
+	assert.Equal(t, tmpLastInv, strat.(*FixedMonths).lastInvested,
+		"lastInvested should remain unchanged.")
+
 }
 
 func TestNoInvestTick(t *testing.T) {
@@ -219,4 +253,68 @@ func TestNoInvestTick(t *testing.T) {
 		p.AssertNotCalled(t, "getCashBalance")
 		p.AssertNotCalled(t, "rebalance", 2000.0, date)
 	}
+}
+
+func TestMinDrawDownTick(t *testing.T) {
+	date := time.Date(2020, 05, 15, 11, 24, 1, 0, time.UTC)
+
+	priceP := &mockPriceProvider{}
+
+	strat := &MinDrawdown{
+		RelVal:    0.8,
+		RefSymbol: "TEST.DE",
+		PriceP:    priceP,
+	}
+
+	// Test error on fetching price
+	priceP.On("GetPrice", "TEST.DE", date).Return(0.0, errors.New("Test error")).Once()
+	p := newMockP(date)
+	strat.tick(date, p)
+	priceP.AssertExpectations(t)
+	p.AssertNotCalled(t, "getCashBalance")
+	p.AssertNotCalled(t, "rebalance", 2000.0, date)
+
+	// Test new maximum value
+	priceP.On("GetPrice", "TEST.DE", date).Return(100.0, nil).Once()
+	p = newMockP(date)
+	strat.tick(date, p)
+	priceP.AssertExpectations(t)
+	p.AssertNotCalled(t, "getCashBalance")
+	p.AssertNotCalled(t, "rebalance", 2000.0, date)
+	assert.Equal(t, 100.0, strat.LastTop, "New top price was not set correctly.")
+
+	// Test no investment if drawdown not large enough
+	priceP.On("GetPrice", "TEST.DE", date).Return(90.0, nil).Once()
+	p = newMockP(date)
+	strat.tick(date, p)
+	priceP.AssertExpectations(t)
+	p.AssertNotCalled(t, "getCashBalance")
+	p.AssertNotCalled(t, "rebalance", 2000.0, date)
+	assert.Equal(t, 100.0, strat.LastTop, "Top price should be unchanged.")
+
+	// Test drawdown large enough and invest
+	priceP.On("GetPrice", "TEST.DE", date).Return(79.5, nil).Once()
+	p = newMockP(date)
+	strat.tick(date, p)
+	priceP.AssertExpectations(t)
+	p.AssertExpectations(t)
+	assert.Equal(t, 79.5, strat.LastTop, "Top price should be lowered.")
+
+	// Test drawdown large enough and error on invest
+	strat.LastTop = 100.0
+	priceP.On("GetPrice", "TEST.DE", date).Return(79.5, nil).Once()
+	p = &mockPortfolio{}
+	p.On("getCashBalance").Return(2000.0)
+	p.On("rebalance", 2000.0, date).Return(errors.New("Test error"))
+	strat.tick(date, p)
+	priceP.AssertExpectations(t)
+	p.AssertExpectations(t)
+	assert.Equal(t, 100.0, strat.LastTop, "Top price should be unchanged.")
+}
+
+func newMockP(callDate time.Time) *mockPortfolio {
+	p := &mockPortfolio{}
+	p.On("getCashBalance").Return(2000.0)
+	p.On("rebalance", 2000.0, callDate).Return(nil)
+	return p
 }

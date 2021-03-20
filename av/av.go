@@ -52,23 +52,29 @@ type tsDailyAdjResp struct {
 	LastQueried time.Time             `json:"lastQueried"`
 }
 
-func GetDividend(symbol string, date time.Time) (float64, error) {
-	// Ensure latest data is available
-	err := maybeUpdateCacheSymbol(symbol)
-	if err != nil {
-		return 0.0, err
+type AvProvider struct{}
+
+func (a *AvProvider) GetPrice(symbol string, date time.Time) (float64, error) {
+	return GetPrice(symbol, date)
+}
+
+func LaunchAV(inAvAPIKey string) {
+	signal.Notify(SigChan, os.Interrupt)
+
+	avAPIKey = inAvAPIKey
+	go limitQueryRate(apiTimeout)
+
+	cwd, pathErr := os.Getwd()
+
+	if pathErr != nil {
+		log.Println(pathErr, ", will not load/save cache.")
+		return
 	}
 
-	cache.RLock()
-	// Existance of symbol was ensured in `maybeUpdateCacheSymbol`
-	tsData, _ := cache.m[symbol]
-	cache.RUnlock()
+	cachePath = path.Join(cwd, cacheFile)
+	loadCache(cachePath)
+	go shutdown(cachePath)
 
-	dailyData, ok := tsData.TimeSeries[date.Format("2006-01-02")]
-	if !ok {
-		return 0.0, nil
-	}
-	return dailyData.DividendAmount, nil
 }
 
 func GetPrice(symbol string, date time.Time) (float64, error) {
@@ -93,6 +99,23 @@ func GetPrice(symbol string, date time.Time) (float64, error) {
 	}
 	//log.Print("No price found")
 	return 0.0, errors.New(fmt.Sprint("Could not find a price for ", symbol))
+}
+
+func GetDateRange(symbol string) (earliest, latest string, err error) {
+	err = maybeUpdateCacheSymbol(symbol)
+	if err != nil {
+		return
+	}
+
+	cache.RLock()
+	defer cache.RUnlock()
+	if tsResp, ok := cache.m[symbol]; ok {
+		earliest, latest, err = getDateRange(tsResp.TimeSeries)
+		return
+	}
+
+	err = errors.New("Symbol not found")
+	return
 }
 
 type qClient interface {
@@ -173,25 +196,6 @@ func getTsDailyAdj(symbol string, client qClient) (resp tsDailyAdjResp, err erro
 	return
 }
 
-func LaunchAV(inAvAPIKey string) {
-	signal.Notify(SigChan, os.Interrupt)
-
-	avAPIKey = inAvAPIKey
-	go limitQueryRate(apiTimeout)
-
-	cwd, pathErr := os.Getwd()
-
-	if pathErr != nil {
-		log.Println(pathErr, ", will not load/save cache.")
-		return
-	}
-
-	cachePath = path.Join(cwd, cacheFile)
-	loadCache(cachePath)
-	go shutdown(cachePath)
-
-}
-
 func limitQueryRate(timeout time.Duration) {
 	for {
 		rateLimitOk <- true
@@ -246,23 +250,6 @@ func loadCache(path string) {
 	}
 
 	cache.Unlock()
-}
-
-func GetDateRange(symbol string) (earliest, latest string, err error) {
-	err = maybeUpdateCacheSymbol(symbol)
-	if err != nil {
-		return
-	}
-
-	cache.RLock()
-	defer cache.RUnlock()
-	if tsResp, ok := cache.m[symbol]; ok {
-		earliest, latest, err = getDateRange(tsResp.TimeSeries)
-		return
-	}
-
-	err = errors.New("Symbol not found")
-	return
 }
 
 func getDateRange(ts map[string]tsDailyAdj) (earliest, latest string, err error) {

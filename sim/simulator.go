@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+type priceProvider interface {
+	GetPrice(string, time.Time) (float64, error)
+}
+
 func Simulate(start time.Time, p Portfolio, inc Income, strat Strategy) (pValues []float64, dates []string, err error) {
 	if time.Now().Sub(start) < 0 {
 		err = errors.New("Start lies in the future")

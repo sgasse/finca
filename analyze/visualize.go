@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/sgasse/finca/av"
 	"github.com/sgasse/finca/sim"
 )
 
@@ -62,8 +63,8 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 			"NoInvest":      &sim.NoInvest{},
 			"January/July":  sim.NewFixedMonthsStrategy(startDate, []time.Month{1, 6}),
 			"April/October": sim.NewFixedMonthsStrategy(startDate, []time.Month{4, 10}),
-			"30%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.7, RefSymbol: symbol},
-			"55%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.45, RefSymbol: symbol},
+			"30%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.7, RefSymbol: symbol, PriceP: &av.AvProvider{}},
+			"55%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.45, RefSymbol: symbol, PriceP: &av.AvProvider{}},
 		}
 
 		if err = addSimResults(&simRes, strats); err != nil {
@@ -180,6 +181,7 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 					LastTop:   0.0,
 					RelVal:    relVal,
 					RefSymbol: symbol,
+					PriceP:    &av.AvProvider{},
 				},
 				fmt.Sprintf("%.0f", perc)+"%Drawdown",
 			)

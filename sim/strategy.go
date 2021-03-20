@@ -2,8 +2,6 @@ package sim
 
 import (
 	"time"
-
-	"github.com/sgasse/finca/av"
 )
 
 type Strategy interface {
@@ -28,6 +26,7 @@ type MinDrawdown struct {
 	LastTop   float64
 	RelVal    float64
 	RefSymbol string
+	PriceP    priceProvider
 }
 
 func NewMonthlyStrategy(startDate time.Time) Strategy {
@@ -84,7 +83,7 @@ func (s *NoInvest) tick(date time.Time, p Portfolio) {
 }
 
 func (s *MinDrawdown) tick(date time.Time, p Portfolio) {
-	curVal, err := av.GetPrice(s.RefSymbol, date)
+	curVal, err := s.PriceP.GetPrice(s.RefSymbol, date)
 	if err != nil {
 		return
 	}
