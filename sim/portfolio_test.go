@@ -21,7 +21,7 @@ func TestMultiPortfolio(t *testing.T) {
 	}
 
 	startCash := 1201.67
-	p, err := NewMultiPortfolio(startCash, stocks, goalRatios)
+	p, err := NewMultiPortfolio(startCash, stocks, goalRatios, 56.0, 0.015)
 	assert.Nil(t, err)
 
 	if mp, ok := p.(*multiPortfolio); ok {
@@ -30,4 +30,19 @@ func TestMultiPortfolio(t *testing.T) {
 		assert.Equal(t, goalRatios, mp.goalRatios, "Goal ratio map differs")
 	}
 
+}
+
+func TestCalcGoalSharesAdjPrice(t *testing.T) {
+	price := 80.0
+	refGoalShares := int64(10)
+	fixedFees := 6.0
+	varFees := 0.015
+
+	totalMoney := price*float64(refGoalShares)*(1+varFees) + fixedFees
+	refAdjPrice := totalMoney / float64(refGoalShares)
+
+	goalShares, adjPrice := calcGoalSharesAdjPrice(totalMoney, price, fixedFees, varFees)
+
+	assert.Equal(t, refGoalShares, goalShares, "Number of goalShares wrong")
+	assert.Equal(t, refAdjPrice, adjPrice, "Adjusted price wrong")
 }

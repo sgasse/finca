@@ -52,7 +52,7 @@ func (fn chartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func compareStrats(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		err := maybeSetSymbol(r)
+		err := maybeSetParams(r)
 		if err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 
 func showStock(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		err := maybeSetSymbol(r)
+		err := maybeSetParams(r)
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func showStock(w http.ResponseWriter, r *http.Request) error {
 
 func biyearly(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		err := maybeSetSymbol(r)
+		err := maybeSetParams(r)
 		if err != nil {
 			return err
 		}
@@ -166,7 +166,7 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 
 func drawdown(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		err := maybeSetSymbol(r)
+		err := maybeSetParams(r)
 		if err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 
 func adaptivePeriodic(w http.ResponseWriter, r *http.Request) error {
 	if r.Method == "GET" {
-		err := maybeSetSymbol(r)
+		err := maybeSetParams(r)
 		if err != nil {
 			return err
 		}

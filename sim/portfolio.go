@@ -49,9 +49,11 @@ type multiPortfolio struct {
 	stocks       map[*Stock]int64
 	transactions []transaction
 	goalRatios   map[*Stock]float64
+	fixedFees    float64
+	varFees      float64
 }
 
-func NewMultiPortfolio(cash float64, stocks map[*Stock]int64, goalRatios map[*Stock]float64) (Portfolio, error) {
+func NewMultiPortfolio(cash float64, stocks map[*Stock]int64, goalRatios map[*Stock]float64, fixedFees float64, varFees float64) (Portfolio, error) {
 	ratioSum := 0.0
 	for stock, ratio := range goalRatios {
 		ratioSum += ratio
@@ -71,7 +73,7 @@ func NewMultiPortfolio(cash float64, stocks map[*Stock]int64, goalRatios map[*St
 	if math.Abs(ratioSum-1.0) > 1e-6 {
 		return &multiPortfolio{}, errors.New("Goal ratios do not sum up to 1.0")
 	}
-	return &multiPortfolio{cash: cash, stocks: stocks, goalRatios: goalRatios}, nil
+	return &multiPortfolio{cash: cash, stocks: stocks, goalRatios: goalRatios, fixedFees: fixedFees, varFees: varFees}, nil
 }
 
 func (p *multiPortfolio) SetStart(date time.Time) {
@@ -119,20 +121,24 @@ func (p *multiPortfolio) rebalance(amount float64, date time.Time) error {
 		return err
 	}
 
-	fees := float64(len(p.stocks)) * fixedFeePerStock
-	totalGoalValue := curTotalStockValue + amount - fees
+	totalGoalValue := curTotalStockValue + amount
 	for stock, curVol := range p.stocks {
-		// All prices have to exist for the call to `getTotalStockValue` to succeed
+		// No error expected. All prices have to exist for the call to
+		// `getTotalStockValue` to have succeeded before.
 		price, _ := av.GetPrice(stock.Symbol, date)
 		goalValue := p.goalRatios[stock] * totalGoalValue
-		goalShares := int64(math.Floor(goalValue / price))
+		goalShares, adjustedPrice := calcGoalSharesAdjPrice(
+			goalValue,
+			price,
+			p.fixedFees,
+			p.varFees,
+		)
 		newShares := goalShares - curVol
 
 		if newShares == 0 {
 			return errors.New("Not enough money to buy a complete share")
 		}
 
-		adjustedPrice := price + fixedFeePerStock/float64(newShares)
 		tr := &stockTransaction{
 			date:        date,
 			stock:       stock,
@@ -202,4 +208,12 @@ func buildTransactionFunc(trs []transaction, cEnd float64, date time.Time) func(
 		return res
 	}
 	return fn
+}
+
+func calcGoalSharesAdjPrice(goalValue, price, fixedFees, varFees float64) (int64, float64) {
+	// newShares * price + fixedFees + (newShares * price)*varFees =!= goalValue
+	// -> newShares = (goalValue - fixedFees) / (price * (1 + varFees))
+	newShares := math.Floor((goalValue - fixedFees) / (price * (1 + varFees)))
+	adjPrice := (1+varFees)*price + (fixedFees / newShares)
+	return int64(newShares), adjPrice
 }

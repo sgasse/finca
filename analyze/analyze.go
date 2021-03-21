@@ -6,10 +6,18 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/sgasse/finca/av"
 	"github.com/sgasse/finca/sim"
+)
+
+var (
+	DefaultFixedFees = 56.0
+	DefaultVarFees   = 0.015
+	FixedFees        = DefaultFixedFees
+	VarFees          = DefaultVarFees
 )
 
 type SimResults struct {
@@ -69,7 +77,20 @@ func getStartDate(symbol string) (sDate time.Time, err error) {
 }
 
 func addSimResult(simRes *SimResults, strat sim.Strategy, name string) error {
-	pValues, dates, irr := sim.SimulateStrategyOnRef(startDate, symbol, strat)
+	fixedFees := 0.0
+	varFees := 0.0
+
+	if FixedFees != DefaultFixedFees || VarFees != DefaultVarFees {
+		fixedFees = FixedFees
+		varFees = VarFees
+	} else if _, ok := strat.(*sim.MidMonth); ok {
+		varFees = DefaultVarFees
+	} else {
+		fixedFees = DefaultFixedFees
+	}
+
+	pValues, dates, irr := sim.SimulateStratOnRef(startDate, symbol, strat, fixedFees, varFees)
+
 	if len(simRes.Dates) == 0 {
 		simRes.Dates = dates
 	} else if len(simRes.Dates) != len(dates) {
@@ -83,7 +104,6 @@ func addSimResult(simRes *SimResults, strat sim.Strategy, name string) error {
 	simRes.IRR[name] = irr
 
 	return nil
-
 }
 
 func addSimResults(simRes *SimResults, strats map[string]sim.Strategy) error {
@@ -102,7 +122,7 @@ func newSimRes() SimResults {
 	}
 }
 
-func maybeSetSymbol(r *http.Request) error {
+func maybeSetParams(r *http.Request) error {
 	params, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
 		return err
@@ -122,6 +142,24 @@ func maybeSetSymbol(r *http.Request) error {
 	}
 
 	startDate = sDate
+
+	param, cFees := params["fixedFees"]
+	if cFees {
+		fFees, err := strconv.ParseFloat(param[0], 64)
+		if err != nil {
+			return err
+		}
+		FixedFees = fFees
+	}
+
+	param, cFees = params["varFees"]
+	if cFees {
+		vFees, err := strconv.ParseFloat(param[0], 64)
+		if err != nil {
+			return err
+		}
+		VarFees = vFees
+	}
 	return nil
 }
 
