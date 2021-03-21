@@ -32,6 +32,7 @@ func LaunchVisualizer() {
 	mux.Handle("/showStock", chartHandler(showStock))
 	mux.Handle("/biyearly", chartHandler(biyearly))
 	mux.Handle("/drawdown", chartHandler(drawdown))
+	mux.Handle("/adaptiveperiodic", chartHandler(adaptivePeriodic))
 	http.ListenAndServe(":"+port, mux)
 }
 
@@ -57,14 +58,17 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		simRes := newSimRes()
+		waitTime := time.Duration(182*24) * time.Hour
 
 		strats := map[string]sim.Strategy{
-			"Monthly":       sim.NewMonthlyStrategy(startDate),
-			"NoInvest":      &sim.NoInvest{},
-			"January/July":  sim.NewFixedMonthsStrategy(startDate, []time.Month{1, 6}),
-			"April/October": sim.NewFixedMonthsStrategy(startDate, []time.Month{4, 10}),
-			"30%Drawdown":   sim.NewMinDrawdown(0.7, symbol, &av.AvProvider{}),
-			"55%Drawdown":   sim.NewMinDrawdown(0.45, symbol, &av.AvProvider{}),
+			"Monthly":         sim.NewMonthlyStrategy(startDate),
+			"NoInvest":        &sim.NoInvest{},
+			"January/July":    sim.NewFixedMonthsStrategy(startDate, []time.Month{1, 6}),
+			"April/October":   sim.NewFixedMonthsStrategy(startDate, []time.Month{4, 10}),
+			"30%Drawdown":     sim.NewMinDrawdown(0.7, symbol, &av.AvProvider{}),
+			"55%Drawdown":     sim.NewMinDrawdown(0.45, symbol, &av.AvProvider{}),
+			"6m||30%Drawdown": sim.NewAdaptivePeriodic(startDate, waitTime, 0.7, symbol, &av.AvProvider{}),
+			"6m||55%Drawdown": sim.NewAdaptivePeriodic(startDate, waitTime, 0.45, symbol, &av.AvProvider{}),
 		}
 
 		if err = addSimResults(&simRes, strats); err != nil {
@@ -146,7 +150,7 @@ func biyearly(w http.ResponseWriter, r *http.Request) error {
 		chData, err := combineCharts(
 			[]chartRes{
 				wrapCR(multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")),
-				wrapCR(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
+				wrapCR(multiSeriesChart(symbol, "biyearly_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
 			},
 		)
 
@@ -188,7 +192,51 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 		chData, err := combineCharts(
 			[]chartRes{
 				wrapCR(multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")),
-				wrapCR(multiSeriesChart(symbol, "hybrid_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
+				wrapCR(multiSeriesChart(symbol, "drawdown_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
+			},
+		)
+
+		t, err := template.ParseFiles("templates/compare.html")
+		if err != nil {
+			return err
+		}
+
+		t.Execute(w, &chData)
+	}
+	return nil
+}
+
+func adaptivePeriodic(w http.ResponseWriter, r *http.Request) error {
+	if r.Method == "GET" {
+		err := maybeSetSymbol(r)
+		if err != nil {
+			return err
+		}
+
+		simRes := newSimRes()
+
+		if err = addSimResult(&simRes, &sim.NoInvest{}, "NoInvest"); err != nil {
+			return err
+		}
+
+		waitTime := time.Duration(182*24) * time.Hour
+
+		for relVal := 0.95; relVal >= 0.3; relVal -= 0.05 {
+			perc := (1.0 - relVal) * 100
+			err = addSimResult(
+				&simRes,
+				sim.NewAdaptivePeriodic(startDate, waitTime, relVal, symbol, &av.AvProvider{}),
+				fmt.Sprintf("6m||%.0f", perc)+"%Drawdown",
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		chData, err := combineCharts(
+			[]chartRes{
+				wrapCR(multiSeriesChart(symbol, "adaptive_periodic_strats", simRes.Dates, simRes.TimeSeries, "templates/timeSeriesComp.html")),
+				wrapCR(multiSeriesChart(symbol, "adaptive_periodic_strats", simRes.Dates, simRes.IRR, "templates/barComp.html")),
 			},
 		)
 
