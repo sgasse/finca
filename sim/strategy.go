@@ -22,17 +22,58 @@ type FixedMonths struct {
 type NoInvest struct {
 }
 
+type WithDrawdown struct {
+	relVal    float64
+	refSymbol string
+	priceP    priceProvider
+	lastTop   float64
+}
+
 type MinDrawdown struct {
-	LastTop   float64
-	RelVal    float64
-	RefSymbol string
-	PriceP    priceProvider
+	WithDrawdown
+}
+
+type AdaptivePeriodic struct {
+	waitTime     time.Duration
+	lastInvested time.Time
+	WithDrawdown
 }
 
 func NewMonthlyStrategy(startDate time.Time) Strategy {
 	return &MidMonth{
 		lastInvested: startDate.Add(-31 * 24 * time.Hour),
 		minDay:       14,
+	}
+}
+
+func NewFixedMonthsStrategy(startDate time.Time, months []time.Month) Strategy {
+	invMonths := map[time.Month]bool{}
+	for _, m := range months {
+		invMonths[m] = true
+	}
+	return &FixedMonths{
+		investMonths: invMonths,
+		// Go 31 days back
+		lastInvested: startDate.Add(-31 * 24 * time.Hour),
+		minDay:       14,
+	}
+}
+
+func NewMinDrawdown(relVal float64, refSymbol string, priceP priceProvider) Strategy {
+	return &MinDrawdown{WithDrawdown{relVal, refSymbol, priceP, 0.0}}
+}
+
+func NewAdaptivePeriodic(startDate time.Time, waitTime time.Duration,
+	relVal float64, refSymbol string, priceP priceProvider) Strategy {
+
+	return &AdaptivePeriodic{
+		waitTime:     waitTime,
+		lastInvested: startDate.Add(-waitTime),
+		WithDrawdown: WithDrawdown{
+			relVal:    relVal,
+			refSymbol: refSymbol,
+			priceP:    priceP,
+		},
 	}
 }
 
@@ -47,19 +88,6 @@ func (mm *MidMonth) tick(date time.Time, p Portfolio) {
 
 			mm.lastInvested = date
 		}
-	}
-}
-
-func NewFixedMonthsStrategy(startDate time.Time, months []time.Month) Strategy {
-	invMonths := map[time.Month]bool{}
-	for _, m := range months {
-		invMonths[m] = true
-	}
-	return &FixedMonths{
-		investMonths: invMonths,
-		// Go 31 days back
-		lastInvested: startDate.Add(-31 * 24 * time.Hour),
-		minDay:       14,
 	}
 }
 
@@ -83,25 +111,52 @@ func (s *NoInvest) tick(date time.Time, p Portfolio) {
 }
 
 func (s *MinDrawdown) tick(date time.Time, p Portfolio) {
-	curVal, err := s.PriceP.GetPrice(s.RefSymbol, date)
-	if err != nil {
-		return
-	}
+	drawdownReached, curVal := s.drawdownTick(date)
 
-	if curVal > s.LastTop {
-		s.LastTop = curVal
-		return
-	}
-
-	if curVal/s.LastTop <= s.RelVal {
-		// Drawdown reached, rebalance
+	if drawdownReached {
+		// Attempt invest
 		err := p.rebalance(p.getCashBalance(), date)
 		if err != nil {
 			return
 		}
 
-		s.LastTop = curVal
+		s.lastTop = curVal
 	}
+}
+
+func (s *AdaptivePeriodic) tick(date time.Time, p Portfolio) {
+	waitOver := date.Sub(s.lastInvested) >= s.waitTime
+	drawdownReached, curVal := s.drawdownTick(date)
+
+	if waitOver || drawdownReached {
+		// Attempt invest
+		err := p.rebalance(p.getCashBalance(), date)
+		if err != nil {
+			return
+		}
+
+		s.lastInvested = date
+		s.lastTop = curVal
+	}
+}
+
+func (wd *WithDrawdown) drawdownTick(date time.Time) (reached bool, curVal float64) {
+	curVal, err := wd.priceP.GetPrice(wd.refSymbol, date)
+	if err != nil {
+		return
+	}
+
+	if curVal > wd.lastTop {
+		wd.lastTop = curVal
+		return
+	}
+
+	if curVal/wd.lastTop <= wd.relVal {
+		reached = true
+		return
+	}
+
+	return
 }
 
 func investedThisMonth(date time.Time, lastInvested time.Time) bool {

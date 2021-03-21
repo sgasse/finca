@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sgasse/finca/av"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -81,6 +82,25 @@ func TestNewFixedMonthsStrategy(t *testing.T) {
 		assert.Contains(t, fixedStrat.investMonths, time.Month(9),
 			"Month September missing")
 	}
+}
+
+func TestNewAdaptivePeriodic(t *testing.T) {
+	startDate := time.Date(2020, 05, 02, 13, 12, 59, 0, time.UTC)
+	waitTime := time.Duration(182*24) * time.Hour
+	strat := NewAdaptivePeriodic(
+		startDate,
+		waitTime,
+		0.7,
+		"TEST.DE",
+		&av.AvProvider{})
+
+	assert.Equal(
+		t,
+		strat.(*AdaptivePeriodic).lastInvested,
+		startDate.Add(-waitTime),
+		"lastInvested should be `waitTime` back in the past",
+	)
+
 }
 
 func TestMidMonthTick(t *testing.T) {
@@ -260,11 +280,7 @@ func TestMinDrawDownTick(t *testing.T) {
 
 	priceP := &mockPriceProvider{}
 
-	strat := &MinDrawdown{
-		RelVal:    0.8,
-		RefSymbol: "TEST.DE",
-		PriceP:    priceP,
-	}
+	strat := NewMinDrawdown(0.8, "TEST.DE", priceP)
 
 	// Test error on fetching price
 	priceP.On("GetPrice", "TEST.DE", date).Return(0.0, errors.New("Test error")).Once()
@@ -281,7 +297,7 @@ func TestMinDrawDownTick(t *testing.T) {
 	priceP.AssertExpectations(t)
 	p.AssertNotCalled(t, "getCashBalance")
 	p.AssertNotCalled(t, "rebalance", 2000.0, date)
-	assert.Equal(t, 100.0, strat.LastTop, "New top price was not set correctly.")
+	assert.Equal(t, 100.0, strat.(*MinDrawdown).lastTop, "New top price was not set correctly.")
 
 	// Test no investment if drawdown not large enough
 	priceP.On("GetPrice", "TEST.DE", date).Return(90.0, nil).Once()
@@ -290,7 +306,7 @@ func TestMinDrawDownTick(t *testing.T) {
 	priceP.AssertExpectations(t)
 	p.AssertNotCalled(t, "getCashBalance")
 	p.AssertNotCalled(t, "rebalance", 2000.0, date)
-	assert.Equal(t, 100.0, strat.LastTop, "Top price should be unchanged.")
+	assert.Equal(t, 100.0, strat.(*MinDrawdown).lastTop, "Top price should be unchanged.")
 
 	// Test drawdown large enough and invest
 	priceP.On("GetPrice", "TEST.DE", date).Return(79.5, nil).Once()
@@ -298,10 +314,10 @@ func TestMinDrawDownTick(t *testing.T) {
 	strat.tick(date, p)
 	priceP.AssertExpectations(t)
 	p.AssertExpectations(t)
-	assert.Equal(t, 79.5, strat.LastTop, "Top price should be lowered.")
+	assert.Equal(t, 79.5, strat.(*MinDrawdown).lastTop, "Top price should be lowered.")
 
 	// Test drawdown large enough and error on invest
-	strat.LastTop = 100.0
+	strat.(*MinDrawdown).lastTop = 100.0
 	priceP.On("GetPrice", "TEST.DE", date).Return(79.5, nil).Once()
 	p = &mockPortfolio{}
 	p.On("getCashBalance").Return(2000.0)
@@ -309,7 +325,82 @@ func TestMinDrawDownTick(t *testing.T) {
 	strat.tick(date, p)
 	priceP.AssertExpectations(t)
 	p.AssertExpectations(t)
-	assert.Equal(t, 100.0, strat.LastTop, "Top price should be unchanged.")
+	assert.Equal(t, 100.0, strat.(*MinDrawdown).lastTop, "Top price should be unchanged.")
+}
+
+func TestAdaptivePeriodic(t *testing.T) {
+	date := time.Date(2020, 1, 14, 11, 24, 1, 0, time.UTC)
+	waitTime := time.Duration(182*24) * time.Hour
+	priceP := &mockPriceProvider{}
+
+	strat := NewAdaptivePeriodic(date, waitTime, 0.8, "TEST.DE", priceP)
+
+	// Invest on the start
+	adaptiveInvest(date, 90.0, strat, t)
+
+	// Do not invest in waitTime (small drawdown)
+	date = time.Date(2020, 4, 15, 11, 24, 1, 0, time.UTC)
+	adaptiveNoInvest(date, 85.0, strat, 90.0, t)
+
+	// Invest after waitTime
+	periodicInvDate := time.Date(2020, 7, 14, 11, 24, 1, 0, time.UTC)
+	adaptiveInvest(periodicInvDate, 80.0, strat, t)
+
+	// Take period invest's last value into accounts as lastTop
+	// - no invest based on last periodic reset
+	date = time.Date(2020, 9, 14, 11, 24, 1, 0, time.UTC)
+	// LastTop should be 80.0 from the last investment.
+	// If it was at 90.0, a price of 70.0 would trigger a reinvestment.
+	adaptiveNoInvest(date, 70.0, strat, 80.0, t)
+
+	// Invest before waitTime through large drawdown
+	ddInvDate := time.Date(2020, 10, 14, 11, 24, 1, 0, time.UTC)
+	adaptiveInvest(ddInvDate, 60.0, strat, t)
+
+	// Next periodic investment should not happen waitTime after last periodic
+	// but waitTime after last in general, which was a drawdown investment.
+	date = periodicInvDate.Add(waitTime)
+	adaptiveNoInvest(date, 90.0, strat, 90.0, t)
+
+	// Next regular periodic investment
+	date = ddInvDate.Add(waitTime)
+	adaptiveInvest(date, 85.0, strat, t)
+}
+
+func TestAdaptivePeriodicFailTick(t *testing.T) {
+	date := time.Date(2020, 1, 14, 11, 24, 1, 0, time.UTC)
+	waitTime := time.Duration(182*24) * time.Hour
+	priceP := &mockPriceProvider{}
+	priceP.On("GetPrice", "TEST.DE", date).Return(100.0, nil).Once()
+
+	p := &mockPortfolio{}
+	p.On("getCashBalance").Return(2000.0)
+	p.On("rebalance", 2000.0, date).Return(errors.New("Test error"))
+	strat := NewAdaptivePeriodic(date, waitTime, 0.8, "TEST.DE", priceP)
+	strat.tick(date, p)
+	priceP.AssertExpectations(t)
+	p.AssertExpectations(t)
+
+}
+
+func adaptiveInvest(date time.Time, price float64, strat Strategy, t *testing.T) {
+	strat.(*AdaptivePeriodic).WithDrawdown.priceP.(*mockPriceProvider).On("GetPrice", "TEST.DE", date).Return(price, nil).Once()
+	p := newMockP(date)
+	strat.tick(date, p)
+	strat.(*AdaptivePeriodic).WithDrawdown.priceP.(*mockPriceProvider).AssertExpectations(t)
+	p.AssertExpectations(t)
+	assert.Equal(t, strat.(*AdaptivePeriodic).lastTop, price, "lastTop wrong")
+}
+
+func adaptiveNoInvest(date time.Time, price float64, strat Strategy, lastTop float64, t *testing.T) {
+	strat.(*AdaptivePeriodic).WithDrawdown.priceP.(*mockPriceProvider).On("GetPrice", "TEST.DE", date).Return(price, nil).Once()
+	p := newMockP(date)
+	strat.tick(date, p)
+	strat.(*AdaptivePeriodic).WithDrawdown.priceP.(*mockPriceProvider).AssertExpectations(t)
+	p.AssertNotCalled(t, "getCashBalance")
+	p.AssertNotCalled(t, "rebalance", 2000.0, date)
+	assert.Equal(t, strat.(*AdaptivePeriodic).lastTop, lastTop, "lastTop wrong")
+
 }
 
 func newMockP(callDate time.Time) *mockPortfolio {

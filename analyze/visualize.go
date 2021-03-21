@@ -63,8 +63,8 @@ func compareStrats(w http.ResponseWriter, r *http.Request) error {
 			"NoInvest":      &sim.NoInvest{},
 			"January/July":  sim.NewFixedMonthsStrategy(startDate, []time.Month{1, 6}),
 			"April/October": sim.NewFixedMonthsStrategy(startDate, []time.Month{4, 10}),
-			"30%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.7, RefSymbol: symbol, PriceP: &av.AvProvider{}},
-			"55%Drawdown":   &sim.MinDrawdown{LastTop: 0.0, RelVal: 0.45, RefSymbol: symbol, PriceP: &av.AvProvider{}},
+			"30%Drawdown":   sim.NewMinDrawdown(0.7, symbol, &av.AvProvider{}),
+			"55%Drawdown":   sim.NewMinDrawdown(0.45, symbol, &av.AvProvider{}),
 		}
 
 		if err = addSimResults(&simRes, strats); err != nil {
@@ -177,12 +177,7 @@ func drawdown(w http.ResponseWriter, r *http.Request) error {
 			perc := (1.0 - relVal) * 100
 			err = addSimResult(
 				&simRes,
-				&sim.MinDrawdown{
-					LastTop:   0.0,
-					RelVal:    relVal,
-					RefSymbol: symbol,
-					PriceP:    &av.AvProvider{},
-				},
+				sim.NewMinDrawdown(relVal, symbol, &av.AvProvider{}),
 				fmt.Sprintf("%.0f", perc)+"%Drawdown",
 			)
 			if err != nil {
