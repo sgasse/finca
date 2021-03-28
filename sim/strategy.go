@@ -4,24 +4,39 @@ import (
 	"time"
 )
 
+// A Strategy is an interface which triggers reinvestments based on some
+// criteria held in its internal state. It gets the current date to evaluate
+// passed along with a Portfolio to trigger rebalancing if the criteria are
+// met.
 type Strategy interface {
 	tick(time.Time, Portfolio)
 }
 
+// This struct implements the Strategy interface and triggers rebalancing
+// always on `minDay` of the month or the first evaluation day after the
+// `minDay`.
 type MidMonth struct {
 	lastInvested time.Time
 	minDay       int
 }
 
+// A FixedMonths strategy triggers rebalancing always on `minDay` or the first
+// evaluation day after `minDay`, but only in months given in `investMonths`.
 type FixedMonths struct {
 	investMonths map[time.Month]bool
 	lastInvested time.Time
 	minDay       int
 }
 
+// NoInvest is an empty strategy implementing the `Strategy` interface but
+// never trigering any investment. It serves as baseline comparison for other
+// strategies.
 type NoInvest struct {
 }
 
+// WithDrawdown is a type to be embedded in other strategies. It holds the state
+// and provides methods to evaluate if a certain minimum drawdown was reached as
+// investment criterion.
 type WithDrawdown struct {
 	relVal    float64
 	refSymbol string
@@ -29,16 +44,23 @@ type WithDrawdown struct {
 	lastTop   float64
 }
 
+// MinDrawdown triggers an investment when a certain minimum drawdown is
+// reached. In the current implementation, it wraps `WithDrawdown`.
 type MinDrawdown struct {
 	WithDrawdown
 }
 
+// AdaptivePeriodic is a hybrid strategy which triggers investments periodically
+// after `waitTime` but also invests earlier if a certain minimum drawdown is
+// reached.
 type AdaptivePeriodic struct {
 	waitTime     time.Duration
 	lastInvested time.Time
 	WithDrawdown
 }
 
+// NewMonthlyStrategy creates a new strategy investing monthly on the 14th or
+// the first evaluation day after the 14th.
 func NewMonthlyStrategy(startDate time.Time) Strategy {
 	return &MidMonth{
 		lastInvested: startDate.Add(-31 * 24 * time.Hour),
@@ -46,6 +68,8 @@ func NewMonthlyStrategy(startDate time.Time) Strategy {
 	}
 }
 
+// NewFixedMonthsStrategy creates a new strategy investing on the 14th of every
+// month given in `month` or the first evaluation day after the 14th.
 func NewFixedMonthsStrategy(startDate time.Time, months []time.Month) Strategy {
 	invMonths := map[time.Month]bool{}
 	for _, m := range months {
@@ -59,10 +83,16 @@ func NewFixedMonthsStrategy(startDate time.Time, months []time.Month) Strategy {
 	}
 }
 
+// NewMinDrawdown creates a new strategy investing when the stock behind
+// `refSymbol` suffered a minimum relative drawdown to `relVal` from its last
+// known top value.
 func NewMinDrawdown(relVal float64, refSymbol string, priceP priceProvider) Strategy {
 	return &MinDrawdown{WithDrawdown{relVal, refSymbol, priceP, 0.0}}
 }
 
+// NewAdaptivePeriodic creates a new strategy investing either when `waitTime`
+// has passed since the last investment or when `refSymbol` suffered a minimum
+// relative drawdown to `relVal` from its last known top value.
 func NewAdaptivePeriodic(startDate time.Time, waitTime time.Duration,
 	relVal float64, refSymbol string, priceP priceProvider) Strategy {
 
