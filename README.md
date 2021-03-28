@@ -87,7 +87,7 @@ The main motivation behind this project was practicing some programming in golan
 The project was setup with a slightly larger scope in mind. This shows e.g. in the fact that retrieving prices is separated out in an extra package and portfolios, strategies etc. are behind interfaces that allow to add other strategies. However I personally do not plan to extend it at this point in time.
 
 ### Choosing your stock
-By passing a stock with `?symbol=MY_SYMBOL`, you can have all calulations done with `MY_SYMBOL` given that AlphaVantage has historic data for it which is not too far spread out. The time range should adjust automatically. However keep in mind that the backend will not automatically switch back to the default symbol `SPY` when you remove the parameter from the URL.
+By passing a stock with `?symbol=MY_SYMBOL`, you can have all calculations done with `MY_SYMBOL` given that AlphaVantage has historic data for it which is not too far spread out. The time range should adjust automatically. However keep in mind that the backend will not automatically switch back to the default symbol `SPY` when you remove the parameter from the URL.
 
 ### Simulating different fees
 The fees are currently set to 1.5% for a monthly investment which you can find in many monthly plans of large brokers. Lump investments are set to 56 USD fixed rate. I pay 56 EUR fixed for investing in eight stocks. If you pay more, consider switching your broker :)
